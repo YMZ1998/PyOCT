@@ -1,7 +1,7 @@
 # PF-OCE imaging reconstruction and processing 
 import os 
 import numpy as np 
-from PyOCT import PyOCTRecon 
+import PyOCTRecon
 import matplotlib.pyplot as plt 
 import matplotlib 
 import re 

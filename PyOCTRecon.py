@@ -5,6 +5,8 @@ Spectral-domain Optical Coherence Tomography Imaging Reconstruction
 : Created at: April 09, 2020 
 """
 import os 
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 import numpy as np 
 import xml.etree.ElementTree as ET
 import time
@@ -12,8 +14,11 @@ from scipy.linalg import dft
 import numpy.matlib 
 import matplotlib.pyplot as plt 
 import matplotlib 
-from PyOCT import CAO 
-from progress.bar import Bar
+# from progress.bar import Bar
+
+# Dataset location used by the non-interactive entry point.  This is deliberately
+# fixed so the reconstruction can be launched in an AI/headless environment.
+DATA_DIR = r"D:\data\dataverse_files"
 
 class OCTImagingProcessing():
     """OCT Imaging Processing
@@ -346,11 +351,13 @@ class OCTImagingProcessing():
         :XLim, Ylim: optional, limits of axis. Default is None. If given, each should have a format as [vmin, vmax] 
         """ 
         matplotlib.rcParams['font.family'] = 'sans-serif'
-        matplotlib.rcParams['font.sans-serif'] = ['Helvetica']
+        matplotlib.rcParams['font.sans-serif'] = ['DejaVu Sans']
         font = {'weight': 'normal',
                 'size'   : 15}
         matplotlib.rc('font', **font)
-        matplotlib.rc('text', usetex=True)
+        # Keep plotting self-contained in headless/CPU environments where a
+        # system LaTeX installation is usually unavailable.
+        matplotlib.rc('text', usetex=False)
         matplotlib.rcParams['pdf.fonttype'] = 42
         matplotlib.rcParams['ps.fonttype'] = 42
         figLine = plt.figure(constrained_layout=False,figsize=(5,4))
@@ -412,11 +419,12 @@ class OCTImagingProcessing():
         from matplotlib.ticker import AutoMinorLocator
         # set font of plot 
         matplotlib.rcParams['font.family'] = 'sans-serif'
-        matplotlib.rcParams['font.sans-serif'] = ['Helvetica']
+        matplotlib.rcParams['font.sans-serif'] = ['DejaVu Sans']
         font = {'weight': 'normal',
                 'size'   : 12}
         matplotlib.rc('font', **font)
-        matplotlib.rc('text', usetex=True)
+        # Avoid requiring an external LaTeX executable in headless environments.
+        matplotlib.rc('text', usetex=False)
         matplotlib.rcParams['pdf.fonttype'] = 42
         matplotlib.rcParams['ps.fonttype'] = 42
         if figHandle == None:
@@ -447,9 +455,18 @@ class OCTImagingProcessing():
             ShowData = np.abs(InputData)
         else:
             raise ValueError 
-        MaxAmp = np.amax(ShowData**self.Settings['gamma'])
-        OCTnorm = matplotlib.colors.Normalize(vmin = 2*np.amin(ShowData**self.Settings['gamma']),vmax = 0.7*np.amax(ShowData**self.Settings['gamma']))
-        axOCTXZ.imshow(ShowData**self.Settings['gamma'],cmap=cm.hot,norm=OCTnorm,interpolation=None, aspect='auto',vmin = 2*np.amin(ShowData**self.Settings['gamma']),vmax = 0.7*np.amax(ShowData**self.Settings['gamma']))
+        display_data = ShowData**self.Settings['gamma']
+        OCTnorm = matplotlib.colors.Normalize(
+            vmin=2*np.amin(display_data),
+            vmax=0.7*np.amax(display_data),
+        )
+        axOCTXZ.imshow(
+            display_data,
+            cmap='gray',
+            norm=OCTnorm,
+            interpolation=None,
+            aspect='auto',
+        )
         #axOCTXZ.imshow(ShowData**self.Settings['gamma'],cmap=cm.hot,norm=OCTnorm,vmin=1*np.amin(ShowData**self.Settings['gamma']),vmax=0.8*np.amax(ShowData**self.Settings['gamma']))
         axOCTXZ.set_xlabel(r"$x$ (pixels)")
         axOCTXZ.set_ylabel(r"$z$ (pixels)")
@@ -554,21 +571,159 @@ class Batch_OCTProcessing():
         if verbose:
             print("Total Reconstruction time is {} sec".format(_time02-_time01))
 
-        
+
+def optimize_dispersion(reconstruction, initial_alpha2=-50, initial_alpha3=-12):
+    """Optimize dispersion on CPU using axial sharpness of stripe-suppressed data."""
+    settings = reconstruction.Settings
+    n_camera = int(settings['NumCameraPix'])
+    depths = np.asarray(settings['depths'], dtype=int)
+    resampled = reconstruction.Resample().dot(reconstruction.SampleData)
+    kz = np.linspace(1, n_camera, n_camera) / n_camera - settings['wctr']
+
+    def reconstruct(alpha2, alpha3):
+        phase = np.exp(1j * np.pi * (alpha2 * kz**2 + alpha3 * kz**3))
+        spectrum = phase[:, None] * resampled
+        # Equivalent to fftshift(conj(dft(N))) used by the original code, but
+        # substantially faster for a parameter sweep.
+        volume = n_camera * np.fft.ifft(
+            np.fft.fftshift(spectrum, axes=0), axis=0
+        )
+        volume = np.fft.fftshift(volume, axes=0)
+        return np.abs(volume[depths, :])
+
+    def sharpness(image):
+        # Remove each depth row's lateral median only for scoring. This prevents
+        # horizontal DC bands from winning the autofocus search.
+        residual = np.maximum(image - np.median(image, axis=1, keepdims=True), 0)
+        residual = residual[max(1, residual.shape[0] // 20):, :]
+        energy = np.sum(residual**2)
+        if energy <= np.finfo(float).eps:
+            return 0.0
+        return float(np.sum(np.diff(residual, axis=0)**2) / energy)
+
+    best = (float(initial_alpha2), float(initial_alpha3))
+    best_image = reconstruct(*best)
+    best_score = sharpness(best_image)
+
+    searches = [
+        (np.linspace(-100, 100, 9), np.linspace(-50, 50, 7)),
+        (np.linspace(-25, 25, 5), np.linspace(-12, 12, 5)),
+    ]
+    for alpha2_offsets, alpha3_offsets in searches:
+        center2, center3 = best
+        for alpha2_offset in alpha2_offsets:
+            for alpha3_offset in alpha3_offsets:
+                alpha2 = center2 + alpha2_offset
+                alpha3 = center3 + alpha3_offset
+                image = reconstruct(alpha2, alpha3)
+                score = sharpness(image)
+                if score > best_score:
+                    best = (float(alpha2), float(alpha3))
+                    best_image = image
+                    best_score = score
+
+    return best_image.astype(np.float32), best[0], best[1], best_score
+
+
+def save_optimization_comparison(reconstruction, optimized, alpha2, alpha3,
+                                 score, output_path):
+    """Save baseline and optimized reconstructions with identical display limits."""
+    baseline = np.squeeze(reconstruction.OCTData)
+    optimized = np.squeeze(optimized)
+    gamma = reconstruction.Settings['gamma']
+    baseline_display = baseline**gamma
+    optimized_display = optimized**gamma
+    combined = np.concatenate((baseline_display.ravel(), optimized_display.ravel()))
+    vmin, vmax = np.percentile(combined, [1, 99.8])
+
+    figure, axes = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
+    panels = [
+        (baseline_display, "Baseline (alpha2=-50, alpha3=-12)"),
+        (optimized_display,
+         f"Optimized (alpha2={alpha2:.1f}, alpha3={alpha3:.1f})"),
+    ]
+    for axis, (image, title) in zip(axes, panels):
+        axis.imshow(image, cmap='gray', aspect='auto', vmin=vmin, vmax=vmax)
+        axis.set_title(title)
+        axis.set_xlabel('x (pixels)')
+    axes[0].set_ylabel('z (pixels)')
+    figure.suptitle(f"OCT dispersion comparison; sharpness={score:.5g}")
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=180, bbox_inches='tight')
+    return figure
+
+
+def run_default_reconstruction():
+    """Run one-frame reconstruction from the fixed Dataverse directory."""
+    from pathlib import Path
+
+    # plt.switch_backend("Agg")
+
+    data_dir = Path(DATA_DIR)
+    if not data_dir.is_dir():
+        raise FileNotFoundError(
+            f"OCT data directory does not exist: {data_dir}. "
+            "Mount or copy the Dataverse files to this exact path."
+        )
+
+    raw_files = sorted(data_dir.glob("*_raw.bin"))
+    background_files = [
+        path for path in raw_files
+        if "bkg" in path.name.lower() or "background" in path.name.lower()
+    ]
+    sample_files = [
+        path for path in raw_files
+        if path not in background_files
+        and path.with_name(path.name[:-8] + "_settings.xml").is_file()
+    ]
+
+    if len(sample_files) != 1 or len(background_files) != 1:
+        raise RuntimeError(
+            "Expected exactly one sample '*_raw.bin' with a matching "
+            "'*_settings.xml', and one background '*_raw.bin' in "
+            f"{data_dir}; found {len(sample_files)} sample(s) and "
+            f"{len(background_files)} background file(s)."
+        )
+
+    sample_id = sample_files[0].name[:-8]
+    background_id = background_files[0].name
+    print(f"Data directory: {data_dir}")
+    print(f"Sample: {sample_files[0].name}")
+    print(f"Background: {background_id}")
+
+    reconstruction = OCTImagingProcessing(
+        root_dir=str(data_dir),
+        sampleID=sample_id,
+        bkgndID=background_id,
+        frames=1,
+        alpha2=-50,
+        alpha3=-12,
+        saveOption=False,
+        ReconstructionMethods="NoCAO",
+    )
+    optimized, best_alpha2, best_alpha3, best_score = optimize_dispersion(
+        reconstruction
+    )
+    print(
+        f"Best CPU dispersion parameters: alpha2={best_alpha2:.1f}, "
+        f"alpha3={best_alpha3:.1f}, sharpness={best_score:.5g}"
+    )
+    output_path = data_dir / f"{sample_id}_optimization_comparison.png"
+    save_optimization_comparison(
+        reconstruction,
+        optimized,
+        best_alpha2,
+        best_alpha3,
+        best_score,
+        output_path,
+    )
+    plt.show()
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=180, bbox_inches='tight')
+    print(f"Optimization comparison saved to: {output_path}")
+    return reconstruction
+
+
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt 
-    import tkinter as tk
-    from tkinter import filedialog
-    from tkinter.filedialog import askopenfilename
-    root = tk.Tk()
-    root_dir = filedialog.askdirectory(parent = root,initialdir="/",title='Please select a directory to load and save data...')
-    sampleID_full =  askopenfilename(filetypes=[("Binary files", "*.bin")],title="Please select your data file")
-    sampleID = os.path.basename(sampleID_full)
-    sampleID = sampleID[0:-8]
-    bkgndID_full = askopenfilename(filetypes=[("Binary files", "*.bin")],title="Please select your Background file") 
-    bkgndID = os.path.basename(bkgndID_full)
-    root.destroy()
-    OCTRe = OCTImagingProcessing(root_dir,sampleID,bkgndID,frames=3,alpha2=-50,alpha3=-12,saveOption=False)  
-    OCTRe.ShowXZ(OCTRe.OCTData) 
-    plt.show() 
+    run_default_reconstruction()
 

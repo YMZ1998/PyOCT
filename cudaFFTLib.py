@@ -184,5 +184,4 @@ if __name__ == "__main__":
     ax1[1, 0].set_title("Numpy iFFT")
     ax1[1, 1].set_title("iFFT phase ({})".format(backend_name))
 
-    if "agg" not in plt.get_backend().lower():
-        plt.show()
+    plt.show()

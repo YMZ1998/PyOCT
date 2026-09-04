@@ -68,11 +68,11 @@ In particular, although the DMD pattern will have components at f and -f the opt
 not be perfectly centered on the optical axis.
 """
 
-
 from pathlib import Path
 import pickle
 import numpy as np
 from numpy import fft
+
 try:
     import joblib
 except ImportError:
@@ -104,6 +104,7 @@ def _parallel_map(function, values):
     return joblib.Parallel(n_jobs=-1, verbose=1, timeout=None)(
         joblib.delayed(function)(value) for value in values
     )
+
 
 def get_centered_roi(centers: Sequence,
                      sizes: Sequence[int],
@@ -157,6 +158,7 @@ def get_centered_roi(centers: Sequence,
 
     return roi
 
+
 def cut_roi(roi: Sequence[int],
             arr: np.ndarray,
             axes: Optional[np.ndarray] = None,
@@ -191,9 +193,10 @@ def cut_roi(roi: Sequence[int],
         if allow_broadcastable_arrays and arr.shape[ax] == 1:
             slices[ax] = slice(0, 1)
         else:
-            slices[ax] = slice(roi[2*ii], roi[2*ii + 1])
+            slices[ax] = slice(roi[2 * ii], roi[2 * ii + 1])
 
     return arr[tuple(slices)]
+
 
 # transform sinusoid parameters under full affine transformation
 def xform_sinusoid_params(fx_obj: float,
@@ -225,7 +228,6 @@ def xform_sinusoid_params(fx_obj: float,
     return fx_img, fy_img, phi_img
 
 
-
 def xform_points(coords: np.ndarray,
                  xform: np.ndarray) -> np.ndarray:
     """
@@ -246,6 +248,7 @@ def xform_points(coords: np.ndarray,
     coords_out = xform.dot(coords_in)[:-1].transpose().reshape(coords.shape)
 
     return coords_out
+
 
 # transform functions/matrices under action of affine transformation
 def xform_mat(mat_obj: np.ndarray,
@@ -374,7 +377,7 @@ def pixel_overlap(centers1: list,
 
     overlaps = []
     for c1, c2, l1, l2 in zip(centers1, centers2, lens1, lens2):
-        if np.abs(c1 - c2) >= 0.5*(l1 + l2):
+        if np.abs(c1 - c2) >= 0.5 * (l1 + l2):
             overlaps.append(0)
         else:
             # ensure whichever pixel has leftmost edge is c1
@@ -393,7 +396,7 @@ def pixel_overlap(centers1: list,
 # ###########################################
 # main simulation functions
 # ###########################################
-_dlp_1stgen_axis = (1/np.sqrt(2), 1/np.sqrt(2), 0)
+_dlp_1stgen_axis = (1 / np.sqrt(2), 1 / np.sqrt(2), 0)
 
 
 # geometry tools
@@ -443,6 +446,7 @@ def get_peak_value(img: np.ndarray,
     peak_value = np.average(img_roi, weights=weights)
 
     return peak_value
+
 
 def simulate_dmd(pattern,
                  wavelength: float,
@@ -513,8 +517,8 @@ def simulate_dmd(pattern,
     mymy = fft.fftshift(mymy)
 
     # center correctly
-    mxmx[:, :nx//2] -= nx
-    mymy[:ny//2, :] -= ny
+    mxmx[:, :nx // 2] -= nx
+    mymy[:ny // 2, :] -= ny
 
     # function to do computation for each output unit vector
     def calc_output_angle(bvec):
@@ -523,9 +527,9 @@ def simulate_dmd(pattern,
 
         # efield phase for each DMD pixel
         efield_per_mirror = efield_profile * \
-                            np.exp(-1j * 2*np.pi / wavelength * (dx * mxmx * bma[0] +
-                                                                 dy * mymy * bma[1] +
-                                                                 zshifts * bma[2]) +
+                            np.exp(-1j * 2 * np.pi / wavelength * (dx * mxmx * bma[0] +
+                                                                   dy * mymy * bma[1] +
+                                                                   zshifts * bma[2]) +
                                    1j * phase_errs)
 
         # get envelope functions for "on" and "off" states
@@ -685,8 +689,8 @@ def interpolate_dmd_data(pattern,
 
     # get DFT results
     _, pattern_dft, pattern_dft_complement, _, _, bvec_dft = \
-          simulate_dmd_dft(pattern, efield_profile, wavelength, gamma_on, gamma_off, dx, dy, wx, wy, uvec_in, order,
-                           dn_orders=0, rot_axis_on=rot_axis_on, rot_axis_off=rot_axis_off)
+        simulate_dmd_dft(pattern, efield_profile, wavelength, gamma_on, gamma_off, dx, dy, wx, wy, uvec_in, order,
+                         dn_orders=0, rot_axis_on=rot_axis_on, rot_axis_off=rot_axis_off)
 
     ny, nx = pattern.shape
     # dft freqs
@@ -714,8 +718,8 @@ def interpolate_dmd_data(pattern,
     def calc(ii):
         ind = np.unravel_index(ii, output_shape)
         val = np.sum((pattern_dft * sinc_efield_on[ind] + pattern_dft_complement * sinc_efield_off[ind]) *
-                      np.expand_dims(dft_interp_1d(dx, bma[ind][0], nx, fxs), axis=0) *
-                      np.expand_dims(dft_interp_1d(dy, bma[ind][1], ny, fys), axis=1))
+                     np.expand_dims(dft_interp_1d(dx, bma[ind][0], nx, fxs), axis=0) *
+                     np.expand_dims(dft_interp_1d(dy, bma[ind][1], ny, fys), axis=1))
         return val
 
     results = _parallel_map(calc, range(nvecs))
@@ -757,14 +761,14 @@ def get_diffracted_power(pattern,
     ny, nx = pattern.shape
     ax, ay, az = uvec_in.ravel()
 
-    power_in = np.sum(np.abs(efield_profile)**2)
+    power_in = np.sum(np.abs(efield_profile) ** 2)
 
     _, pattern_dft, pattern_complement_dft, sinc_efield_on, sinc_efield_off, uvecs_out_dft = \
         simulate_dmd_dft(pattern, efield_profile, wavelength, gamma_on, gamma_off, dx, dy, wx, wy, uvec_in,
                          order=(0, 0), dn_orders=0, rot_axis_on=rot_axis_on, rot_axis_off=rot_axis_off)
 
     # check that power is conserved here...
-    assert np.abs(np.sum(np.abs(pattern_dft + pattern_complement_dft)**2) / (nx * ny) - power_in) < 1e-12
+    assert np.abs(np.sum(np.abs(pattern_dft + pattern_complement_dft) ** 2) / (nx * ny) - power_in) < 1e-12
 
     # get FFT freqs
     fxs = (uvecs_out_dft[..., 0] - ax) * dx / wavelength
@@ -790,7 +794,8 @@ def get_diffracted_power(pattern,
         on_sum = np.nansum(envelope_on ** 2)
         off_sum = np.nansum(envelope_off ** 2)
 
-        power_out = np.nansum(np.abs(envelope_on * pattern_dft + envelope_off * pattern_complement_dft) ** 2) / (nx * ny)
+        power_out = np.nansum(np.abs(envelope_on * pattern_dft + envelope_off * pattern_complement_dft) ** 2) / (
+                    nx * ny)
 
         return power_out, on_sum, off_sum
 
@@ -833,6 +838,7 @@ def get_diffracted_power(pattern,
 
     return power_in, power_out
 
+
 # ###########################################
 # misc helper functions
 # ###########################################
@@ -871,9 +877,13 @@ def get_rot_mat(rot_axis: list,
         raise ValueError("rot_axis must be a unit vector")
 
     nx, ny, nz = rot_axis
-    mat = np.array([[nx**2 * (1 - np.cos(gamma)) + np.cos(gamma), nx * ny * (1 - np.cos(gamma)) - nz * np.sin(gamma), nx * nz * (1 - np.cos(gamma)) + ny * np.sin(gamma)],
-                    [nx * ny * (1 - np.cos(gamma)) + nz * np.sin(gamma), ny**2 * (1 - np.cos(gamma)) + np.cos(gamma), ny * nz * (1 - np.cos(gamma)) - nx * np.sin(gamma)],
-                    [nx * nz * (1 - np.cos(gamma)) - ny * np.sin(gamma), ny * nz * (1 - np.cos(gamma)) + nx * np.sin(gamma), nz**2 * (1 - np.cos(gamma)) + np.cos(gamma)]])
+    mat = np.array([[nx ** 2 * (1 - np.cos(gamma)) + np.cos(gamma), nx * ny * (1 - np.cos(gamma)) - nz * np.sin(gamma),
+                     nx * nz * (1 - np.cos(gamma)) + ny * np.sin(gamma)],
+                    [nx * ny * (1 - np.cos(gamma)) + nz * np.sin(gamma), ny ** 2 * (1 - np.cos(gamma)) + np.cos(gamma),
+                     ny * nz * (1 - np.cos(gamma)) - nx * np.sin(gamma)],
+                    [nx * nz * (1 - np.cos(gamma)) - ny * np.sin(gamma),
+                     ny * nz * (1 - np.cos(gamma)) + nx * np.sin(gamma),
+                     nz ** 2 * (1 - np.cos(gamma)) + np.cos(gamma)]])
     # mat = np.array([[nx**2 * (1 - np.cos(gamma)) + np.cos(gamma), nx * ny * (1 - np.cos(gamma)) + nz * np.sin(gamma), nx * nz * (1 - np.cos(gamma)) - ny * np.sin(gamma)],
     #                 [nx * ny * (1 - np.cos(gamma)) - nz * np.sin(gamma), ny**2 * (1 - np.cos(gamma)) + np.cos(gamma), ny * nz * (1 - np.cos(gamma)) + nx * np.sin(gamma)],
     #                 [nx * nz * (1 - np.cos(gamma)) + ny * np.sin(gamma), ny * nz * (1 - np.cos(gamma)) - nx * np.sin(gamma), nz**2 * (1 - np.cos(gamma)) + np.cos(gamma)]])
@@ -893,7 +903,6 @@ def get_rot_mat_angle_axis(rot_mat: np.ndarray):
     """
     if np.linalg.norm(rot_mat.dot(rot_mat.transpose()) - np.identity(rot_mat.shape[0])) > 1e-12:
         raise ValueError("rot_mat was not a valid rotation matrix")
-
 
     eig_vals, eig_vects = np.linalg.eig(rot_mat)
 
@@ -1119,7 +1128,7 @@ def xy2uvector(tx,
     """
     tx = np.atleast_1d(tx)
     ty = np.atleast_1d(ty)
-    norm = np.sqrt(np.tan(tx)**2 + np.tan(ty)**2 + 1)
+    norm = np.sqrt(np.tan(tx) ** 2 + np.tan(ty) ** 2 + 1)
     if mode == 'in':
         ux = np.tan(tx)
         uy = np.tan(ty)
@@ -1161,7 +1170,7 @@ def dmd_frq2uvec(uvec_out_dc,
 
     bfx = uvec_out_dc[0] + wavelength / dx * fx
     bfy = uvec_out_dc[1] + wavelength / dy * fy
-    bfz = np.sqrt(1 - bfx**2 - bfy**2)
+    bfz = np.sqrt(1 - bfx ** 2 - bfy ** 2)
 
     return bfx, bfy, bfz
 
@@ -1202,7 +1211,8 @@ def get_fourier_plane_basis(optical_axis_uvec):
     @param optical_axis_uvec: unit vector defining the optical axis
     @return xb, yb:
     """
-    xb = np.array([optical_axis_uvec[2], 0, -optical_axis_uvec[0]]) / np.sqrt(optical_axis_uvec[0] ** 2 + optical_axis_uvec[2] ** 2)
+    xb = np.array([optical_axis_uvec[2], 0, -optical_axis_uvec[0]]) / np.sqrt(
+        optical_axis_uvec[0] ** 2 + optical_axis_uvec[2] ** 2)
     yb = np.cross(optical_axis_uvec, xb)
 
     return xb, yb
@@ -1239,7 +1249,6 @@ def dmd_frq2opt_axis_uvec(fx,
 
     if np.abs(np.linalg.norm(opt_axis_vec) - 1) > 1e-12:
         raise ValueError("pvec was not a unit vector")
-
 
     fx = np.atleast_1d(fx)
     fy = np.atleast_1d(fy)
@@ -1346,7 +1355,7 @@ def blaze_envelope(wavelength: float,
     :return envelope: same length as b_minus_a
     """
 
-    k = 2*np.pi / wavelength
+    k = 2 * np.pi / wavelength
     val_plus, val_minus = blaze_condition_fn(gamma, b_minus_a, rot_axis=rot_axis)
     envelope = sinc_fn(0.5 * k * wx * val_plus) * sinc_fn(0.5 * k * wy * val_minus)
     return envelope
@@ -1448,9 +1457,9 @@ def get_physical_diff_orders(uvec_in,
     nyny = nyny.astype(float)
 
     # check which DC orders are allowed
-    bx = ax + wavelength/dx * nxnx
-    by = ay + wavelength/dy * nyny
-    allowed_dc = bx**2 + by**2 <= 1
+    bx = ax + wavelength / dx * nxnx
+    by = ay + wavelength / dy * nyny
+    allowed_dc = bx ** 2 + by ** 2 <= 1
 
     # check corner diffraction orders
     bx_c1 = ax + wavelength / dx * (nxnx + 0.5)
@@ -1461,10 +1470,10 @@ def get_physical_diff_orders(uvec_in,
     by_c3 = ay + wavelength / dy * (nyny + 0.5)
     bx_c4 = ax + wavelength / dx * (nxnx - 0.5)
     by_c4 = ay + wavelength / dy * (nyny - 0.5)
-    allowed_any = np.logical_or.reduce((bx_c1**2 + by_c1**2 <= 1,
-                                        bx_c2**2 + by_c2**2 <= 1,
-                                        bx_c3**2 + by_c3**2 <= 1,
-                                        bx_c4**2 + by_c4**2 <= 1))
+    allowed_any = np.logical_or.reduce((bx_c1 ** 2 + by_c1 ** 2 <= 1,
+                                        bx_c2 ** 2 + by_c2 ** 2 <= 1,
+                                        bx_c3 ** 2 + by_c3 ** 2 <= 1,
+                                        bx_c4 ** 2 + by_c4 ** 2 <= 1))
 
     ns = np.stack((nxnx, nyny), axis=-1)
 
@@ -1494,9 +1503,9 @@ def find_nearst_diff_order(uvec_in,
 
     bxs = ax + ns[..., 0] * wavelength / dx
     bys = ay + ns[..., 1] * wavelength / dy
-    bzs = np.sqrt(1 - bxs**2 - bys**2)
+    bzs = np.sqrt(1 - bxs ** 2 - bys ** 2)
 
-    dists = np.sqrt((bxs - ux)**2 + (bys - uy)**2 + (bzs - uz)**2)
+    dists = np.sqrt((bxs - ux) ** 2 + (bys - uy) ** 2 + (bzs - uz) ** 2)
     ind_min = np.unravel_index(np.nanargmin(dists), ns[..., 0].shape)
 
     order = ns[ind_min].astype(int)
@@ -1525,7 +1534,7 @@ def solve_diffraction_input(uvecs_out,
 
     ax = uvecs_out[..., 0] - wavelength / dx * order[0]
     ay = uvecs_out[..., 1] - wavelength / dy * order[1]
-    az = -np.sqrt(1 - ax**2 - ay**2)
+    az = -np.sqrt(1 - ax ** 2 - ay ** 2)
     uvecs_in = np.stack((ax, ay, az), axis=-1)
 
     return uvecs_in
@@ -1556,7 +1565,7 @@ def solve_diffraction_output(uvecs_in,
     bx = uvecs_in[..., 0] + wavelength / dx * order[0]
     by = uvecs_in[..., 1] + wavelength / dy * order[1]
     with np.errstate(invalid="ignore"):
-        bz = np.sqrt(1 - bx**2 - by**2)
+        bz = np.sqrt(1 - bx ** 2 - by ** 2)
 
     # these points have no solution
     bx[np.isnan(bz)] = np.nan
@@ -1635,10 +1644,10 @@ def solve_1color_1d(wavelength: float,
     # this implies a1 = -a2
 
     a3 = -1 / np.sqrt(2) / np.sin(gamma) * wavelength / d * order
-    a1_p = np.sqrt(1 - a3**2) / np.sqrt(2)
+    a1_p = np.sqrt(1 - a3 ** 2) / np.sqrt(2)
     a2_p = - a1_p
 
-    a1_m = -np.sqrt(1 - a3**2) / np.sqrt(2)
+    a1_m = -np.sqrt(1 - a3 ** 2) / np.sqrt(2)
     a2_m = -a1_m
 
     a_p = mirror2xyz(a1_p, a2_p, a3, gamma, rot_axis=_dlp_1stgen_axis)
@@ -1684,10 +1693,10 @@ def solve_2color_on_off(d: float,
     # quadratic equation for bx from (2)
     c1 = 1
     c2 = -(b3_on - b3_off) / np.sqrt(2) / np.sin(gamma_on)
-    c3 = 0.5 * (bz**2 + (b3_on - b3_off)**2 / 2 / np.sin(gamma_on)**2 - 1)
+    c3 = 0.5 * (bz ** 2 + (b3_on - b3_off) ** 2 / 2 / np.sin(gamma_on) ** 2 - 1)
 
-    bxs = np.array([0.5 * (-c2 + np.sqrt(c2**2 - 4 * c3)) / c1,
-                    0.5 * (-c2 - np.sqrt(c2**2 - 4 * c3)) / c1])
+    bxs = np.array([0.5 * (-c2 + np.sqrt(c2 ** 2 - 4 * c3)) / c1,
+                    0.5 * (-c2 - np.sqrt(c2 ** 2 - 4 * c3)) / c1])
 
     # apply eq. (2) again to get by (since lost information when we squared it to get quadratic eqn)
     bys = bxs - (b3_on - b3_off) / np.sqrt(2) / np.sin(gamma_on)
@@ -1764,11 +1773,11 @@ def solve_combined_condition(d: float,
     bma_y = ny * wavelength / d
     bma_z = -wavelength / d * (nx * (rot_mat[2, 0] * rot_mat[0, 0] + rot_mat[2, 1] * rot_mat[0, 1]) +
                                ny * (rot_mat[2, 0] * rot_mat[1, 0] + rot_mat[2, 1] * rot_mat[1, 1])) / \
-            (rot_mat[2, 0]**2 + rot_mat[2, 1]**2)
-    #bma_1, bma_2, bma_3 = xyz2mirror(bma_x, bma_y, bma_z, gamma, rot_axis)
+            (rot_mat[2, 0] ** 2 + rot_mat[2, 1] ** 2)
+    # bma_1, bma_2, bma_3 = xyz2mirror(bma_x, bma_y, bma_z, gamma, rot_axis)
 
-    bma_norm = np.sqrt(bma_x**2 + bma_y**2 + bma_z**2)
-    b_dot_a = 0.5 * (2 - bma_norm**2)
+    bma_norm = np.sqrt(bma_x ** 2 + bma_y ** 2 + bma_z ** 2)
+    b_dot_a = 0.5 * (2 - bma_norm ** 2)
 
     # choose value for ax, then use ax*bx + ay*by - sqrt(1 - ax^2 - ay^2) * sqrt(1 - bx^2 - by^2) = K
     # together with diffraction condition to obtain quadratic equation for ay
@@ -1777,20 +1786,20 @@ def solve_combined_condition(d: float,
         bx = ax + bma_x
 
         # solve quadratic equation to get ay
-        a = 2 * (ax*bx - b_dot_a) + (1 - bx**2) + (1 - ax**2)
-        b = 2 * ny * wavelength / d * ((ax*bx - b_dot_a) + (1 - ax**2))
-        c = (ax*bx - b_dot_a)**2 - (1 - bx**2) * (1 - ax**2) + (1 - ax**2) * (ny * wavelength / d)**2
+        a = 2 * (ax * bx - b_dot_a) + (1 - bx ** 2) + (1 - ax ** 2)
+        b = 2 * ny * wavelength / d * ((ax * bx - b_dot_a) + (1 - ax ** 2))
+        c = (ax * bx - b_dot_a) ** 2 - (1 - bx ** 2) * (1 - ax ** 2) + (1 - ax ** 2) * (ny * wavelength / d) ** 2
 
         with np.errstate(invalid="ignore"):
             if positive:
-                ay = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+                ay = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
             else:
-                ay = (-b - np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+                ay = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
         by = ay + bma_y
 
         # solve az, bz from unit vector equation
-        az = -np.sqrt(1 - ax**2 - ay**2)
-        bz = np.sqrt(1 - bx**2 - by**2)
+        az = -np.sqrt(1 - ax ** 2 - ay ** 2)
+        bz = np.sqrt(1 - bx ** 2 - by ** 2)
 
         a = np.stack((ax, ay, az), axis=1)
         b = np.stack((bx, by, bz), axis=1)
@@ -1924,7 +1933,7 @@ def simulate_1d(pattern,
                 wy: float,
                 tm_ins,
                 tm_out_offsets=None,
-                ndiff_orders: int=10):
+                ndiff_orders: int = 10):
     """
     Simulate various colors of light incident on a DMD, assuming the DMD is oriented so that the mirrors swivel in
     the same plane the incident light travels in and that this plane makes a 45 degree angle with the principle axes
@@ -1991,11 +2000,12 @@ def simulate_1d(pattern,
         # #########################
         for ii in range(n_wavelens):
             efields[kk, :, ii], sinc_efield_on[kk, :, ii], sinc_efield_off[kk, :, ii] \
-             = simulate_dmd(pattern, wavelengths[ii], gamma_on, gamma_off, dx, dy, wx, wy, uvecs_in, uvecs_out[kk])
+                = simulate_dmd(pattern, wavelengths[ii], gamma_on, gamma_off, dx, dy, wx, wy, uvecs_in, uvecs_out[kk])
 
             # get diffraction orders. Orders we want are along the antidiagonal
             for aa in range(len(nxs)):
-                diff_uvec_out[kk, ii, aa] = solve_diffraction_output(uvecs_in[kk], dx, dy, wavelengths[ii], (nxs[aa], nys[aa]))
+                diff_uvec_out[kk, ii, aa] = solve_diffraction_output(uvecs_in[kk], dx, dy, wavelengths[ii],
+                                                                     (nxs[aa], nys[aa]))
 
     # store data
     data = {'pattern': pattern, 'wavelengths': wavelengths,
@@ -2057,7 +2067,7 @@ def plot_1d_sim(data,
         cmap = plt.get_cmap('jet')
         colors = [cmap(ii / (n_wavelens - 1)) for ii in range(n_wavelens)]
 
-    #decide how to scale plot
+    # decide how to scale plot
     if plot_log:
         scale_fn = lambda I: np.log10(I)
     else:
@@ -2097,18 +2107,18 @@ def plot_1d_sim(data,
 
         for ii in range(n_wavelens):
             # get intensities
-            intensity = np.abs(efields[kk, :, ii])**2
+            intensity = np.abs(efields[kk, :, ii]) ** 2
             intensity_sinc_on = np.abs(sinc_efield_on[kk, :, ii]) ** 2
 
             # normalize intensity to sinc
             im = np.argmax(np.abs(intensity))
-            norm = intensity[im] / (intensity_sinc_on[im] / wx**2 / wy**2)
+            norm = intensity[im] / (intensity_sinc_on[im] / wx ** 2 / wy ** 2)
 
             # plot intensities
             ax.plot(tms_out * 180 / np.pi, scale_fn(intensity / norm), color=colors[ii])
-            ax.plot(tms_out * 180 / np.pi, scale_fn(intensity_sinc_on / (wx*wy)**2), color=colors[ii], ls=':')
-            ax.plot(tms_out * 180 / np.pi, scale_fn(np.abs(sinc_efield_off[kk, :, ii]) ** 2 / (wx*wy)**2),
-                     color=colors[ii], ls='--')
+            ax.plot(tms_out * 180 / np.pi, scale_fn(intensity_sinc_on / (wx * wy) ** 2), color=colors[ii], ls=':')
+            ax.plot(tms_out * 180 / np.pi, scale_fn(np.abs(sinc_efield_off[kk, :, ii]) ** 2 / (wx * wy) ** 2),
+                    color=colors[ii], ls='--')
 
         ylim = ax.get_ylim()
 
@@ -2117,7 +2127,8 @@ def plot_1d_sim(data,
         ax.plot([tms_blaze_off * 180 / np.pi, tms_blaze_off * 180 / np.pi], ylim, 'k--')
 
         # plot diffraction peaks
-        _, diff_tms = uvector2tmtp(diff_uvec_out[kk,..., 0], diff_uvec_out[kk, ..., :, 1], diff_uvec_out[kk, ..., :, 2])
+        _, diff_tms = uvector2tmtp(diff_uvec_out[kk, ..., 0], diff_uvec_out[kk, ..., :, 1],
+                                   diff_uvec_out[kk, ..., :, 2])
         for ii in range(n_wavelens):
             plt.plot(np.array([diff_tms[ii], diff_tms[ii]]) * 180 / np.pi, ylim, color=colors[ii], ls='-')
         ax.plot(diff_tms[0, iz] * 180 / np.pi, diff_tms[0, iz] * 180 / np.pi, ylim, 'm')
@@ -2134,9 +2145,10 @@ def plot_1d_sim(data,
         ax = figh.add_subplot(grid[0, 1])
 
         for ii in range(n_wavelens):
-            ax.plot(tms_out * 180 / np.pi, scale_fn(np.abs(sinc_efield_on[kk, :, ii] / wx / wy)**2),
-                     color=colors[ii], ls=':', label="%.0f" % (1e9 * wavelengths[ii]))
-            ax.plot(tms_out * 180 / np.pi, scale_fn(np.abs(sinc_efield_off[kk, :, ii] / wx / wy)**2), color=colors[ii], ls='--')
+            ax.plot(tms_out * 180 / np.pi, scale_fn(np.abs(sinc_efield_on[kk, :, ii] / wx / wy) ** 2),
+                    color=colors[ii], ls=':', label="%.0f" % (1e9 * wavelengths[ii]))
+            ax.plot(tms_out * 180 / np.pi, scale_fn(np.abs(sinc_efield_off[kk, :, ii] / wx / wy) ** 2),
+                    color=colors[ii], ls='--')
 
         # get xlim, ylim, set back to these at the end
         ylim = ax.get_ylim()
@@ -2183,6 +2195,7 @@ def plot_1d_sim(data,
             plt.close(figh)
 
     return figs, fig_names
+
 
 # ###########################################
 # 2D simulation for multiple wavelengths
@@ -2278,7 +2291,8 @@ def simulate_2d(pattern: np.ndarray,
                 diff_ind = np.unravel_index(aa, diff_nx.shape)
                 uvec_out_diff[kk][input_ind][diff_ind] = solve_diffraction_output(uvecs_in[input_ind], dx, dy,
                                                                                   wavelengths[kk],
-                                                                                  (diff_nx[diff_ind], diff_ny[diff_ind]))
+                                                                                  (diff_nx[diff_ind],
+                                                                                   diff_ny[diff_ind]))
 
             # solve diffracted fields
             efields[kk][input_ind], sinc_efield_on[kk][input_ind], sinc_efield_off[kk][input_ind] = \
@@ -2333,9 +2347,9 @@ def plot_2d_sim(data: dict,
     iz = np.where(np.logical_and(diff_nx == 0, diff_ny == 0))
 
     # simulation results
-    intensity = np.abs(data['efields'])**2
-    sinc_on = np.abs(data["sinc_efield_on"])**2
-    sinc_off = np.abs(data["sinc_efield_off"])**2
+    intensity = np.abs(data['efields']) ** 2
+    sinc_on = np.abs(data["sinc_efield_on"]) ** 2
+    sinc_off = np.abs(data["sinc_efield_off"]) ** 2
 
     # plot results
     figs = []
@@ -2362,20 +2376,21 @@ def plot_2d_sim(data: dict,
                         (int(wavelengths[kk] * 1e9), dx * 1e6, wx * 1e6,
                          gamma_on * 180 / np.pi, gamma_off * 180 / np.pi,
                          tx_in * 180 / np.pi, ty_in * 180 / np.pi,
-                         tm_in * 180 / np.pi, tp_in * 180/np.pi,
+                         tm_in * 180 / np.pi, tp_in * 180 / np.pi,
                          uvecs_in[input_ind][0], uvecs_in[input_ind][1], uvecs_in[input_ind][2])
 
             tx_out, ty_out = uvector2txty(uvecs_out[input_ind][..., 0], uvecs_out[input_ind][..., 1],
                                           uvecs_out[input_ind][..., 2])
             dtout = tx_out[0, 1] - tx_out[0, 0]
-            extent = [(tx_out.min() - 0.5 * dtout) * 180/np.pi,
-                      (tx_out.max() + 0.5 * dtout) * 180/np.pi,
-                      (ty_out.min() - 0.5 * dtout) * 180/np.pi,
-                      (ty_out.max() + 0.5 * dtout) * 180/np.pi]
+            extent = [(tx_out.min() - 0.5 * dtout) * 180 / np.pi,
+                      (tx_out.max() + 0.5 * dtout) * 180 / np.pi,
+                      (ty_out.min() - 0.5 * dtout) * 180 / np.pi,
+                      (ty_out.max() + 0.5 * dtout) * 180 / np.pi]
 
             # Fourier plane positions, assuming that diffraction order closest to blaze condition
             # is along the optical axis
-            diff_ind = np.nanargmin(np.linalg.norm(uvecs_out_diff[kk][input_ind] - uvecs_out_blaze_on[input_ind], axis=-1))
+            diff_ind = np.nanargmin(
+                np.linalg.norm(uvecs_out_diff[kk][input_ind] - uvecs_out_blaze_on[input_ind], axis=-1))
             diff_2d_ind = np.unravel_index(diff_ind, uvecs_out_diff[kk][input_ind].shape[:-1])
 
             # get fourier plane positions for intensity output angles
@@ -2385,10 +2400,12 @@ def plot_2d_sim(data: dict,
 
             # get fourier plane positions for blaze conditions
             fx_blaze_on, fy_blaze_on = uvec2dmd_frq(opt_axis, uvecs_out_blaze_on[input_ind], wavelengths[kk], dx, dy)
-            xf_blaze_on, yf_blaze_on, _ = dmd_frq2opt_axis_uvec(fx_blaze_on, fy_blaze_on, opt_axis, opt_axis, dx, dy, wavelengths[kk])
+            xf_blaze_on, yf_blaze_on, _ = dmd_frq2opt_axis_uvec(fx_blaze_on, fy_blaze_on, opt_axis, opt_axis, dx, dy,
+                                                                wavelengths[kk])
 
             fx_blaze_off, fy_blaze_off = uvec2dmd_frq(opt_axis, uvecs_out_blaze_off[input_ind], wavelengths[kk], dx, dy)
-            xf_blaze_off, yf_blaze_off, _ = dmd_frq2opt_axis_uvec(fx_blaze_off, fy_blaze_off, opt_axis, opt_axis, dx, dy, wavelengths[kk])
+            xf_blaze_off, yf_blaze_off, _ = dmd_frq2opt_axis_uvec(fx_blaze_off, fy_blaze_off, opt_axis, opt_axis, dx,
+                                                                  dy, wavelengths[kk])
 
             # get fourier plane positions for diffraction peaks
             fx_diff, fy_diff = uvec2dmd_frq(opt_axis, uvecs_out_diff[kk][input_ind], wavelengths[kk], dx, dy)
@@ -2406,7 +2423,7 @@ def plot_2d_sim(data: dict,
             ax.set_ylabel(r'$\theta_y$ outgoing (deg)')
             ax.set_title('I / (wx*wy*nx*ny)**2 vs. output angle')
 
-            ax.imshow(intensity[kk][input_ind] / (dx*dy*nx*ny)**2, extent=extent, norm=PowerNorm(gamma=gamma),
+            ax.imshow(intensity[kk][input_ind] / (dx * dy * nx * ny) ** 2, extent=extent, norm=PowerNorm(gamma=gamma),
                       cmap="bone", origin="lower")
             # get xlim and ylim, we will want to keep these...
             xlim = ax.get_xlim()
@@ -2414,10 +2431,10 @@ def plot_2d_sim(data: dict,
 
             # blaze condition
             ax.add_artist(Circle((tx_blaze_on * 180 / np.pi, ty_blaze_on * 180 / np.pi),
-                          radius=1, color='r', fill=0, ls='-'))
+                                 radius=1, color='r', fill=0, ls='-'))
 
             ax.add_artist(Circle((tx_blaze_off * 180 / np.pi, ty_blaze_off * 180 / np.pi),
-                          radius=1, color='g', fill=0, ls='-'))
+                                 radius=1, color='g', fill=0, ls='-'))
 
             # diffraction peaks
             ax.scatter(diff_tx_out * 180 / np.pi, diff_ty_out * 180 / np.pi, edgecolor='y', facecolor='none')
@@ -2466,8 +2483,8 @@ def plot_2d_sim(data: dict,
             ax.set_ylabel(r'$\theta_y$ outgoing')
             ax.set_title('blaze condition sinc envelope (angular)')
 
-            ax.imshow(sinc_on[kk][input_ind] / (wx*wy)**2, extent=extent,
-                       norm=PowerNorm(gamma=1), cmap="bone", origin="lower")
+            ax.imshow(sinc_on[kk][input_ind] / (wx * wy) ** 2, extent=extent,
+                      norm=PowerNorm(gamma=1), cmap="bone", origin="lower")
             xlim = ax.get_xlim()
             ylim = ax.get_ylim()
 
@@ -2495,7 +2512,7 @@ def plot_2d_sim(data: dict,
             ax.set_title('blaze condition sinc envelope (fourier plane)')
             ax.axis("equal")
             ax.set_facecolor("k")
-            ax.scatter(xf, yf, c=sinc_on[kk][input_ind] / (wx*wy)**2, cmap="bone", norm=PowerNorm(gamma=1))
+            ax.scatter(xf, yf, c=sinc_on[kk][input_ind] / (wx * wy) ** 2, cmap="bone", norm=PowerNorm(gamma=1))
             # get xlim and ylim, we will want to keep these...
             xlim = ax.get_xlim()
             ylim = ax.get_ylim()
@@ -2578,7 +2595,8 @@ def simulate_2d_angles(wavelengths: list,
     uvec_in = xy2uvector(txtx_in, tyty_in, mode="in")
 
     # get output angles
-    uvec_out_diff = np.zeros((n_wavelens, txtx_in.shape[0], txtx_in.shape[1], 2 * ndiff_orders + 1, 2 * ndiff_orders + 1, 3))
+    uvec_out_diff = np.zeros(
+        (n_wavelens, txtx_in.shape[0], txtx_in.shape[1], 2 * ndiff_orders + 1, 2 * ndiff_orders + 1, 3))
     uvecs_out_blaze = np.zeros(txtx_in.shape + (3,))
     # loop over input angles
     for ii in range(txtx_in.size):
@@ -2598,7 +2616,6 @@ def simulate_2d_angles(wavelengths: list,
             }
 
     return data
-
 
 
 def get_sim_pattern(dmd_size: list,
@@ -2782,17 +2799,17 @@ def double_cell(cell,
         xs = x
         ys = y
         for ii in range(na):
-            big_cell, xs, ys = double_cell(big_cell, xs, ys, 2**ii * vec_a, vec_b, na=1, nb=0)
+            big_cell, xs, ys = double_cell(big_cell, xs, ys, 2 ** ii * vec_a, vec_b, na=1, nb=0)
 
         for jj in range(nb):
-            big_cell, xs, ys = double_cell(big_cell, xs, ys, 2**jj * vec_b, 2**na * vec_a, na=1, nb=0)
+            big_cell, xs, ys = double_cell(big_cell, xs, ys, 2 ** jj * vec_b, 2 ** na * vec_a, na=1, nb=0)
     else:
         dyc, dxc = cell.shape
 
         v1 = np.array([0, 0])
-        v2 = 2*vec_a
+        v2 = 2 * vec_a
         v3 = vec_b
-        v4 = 2*vec_a + vec_b
+        v4 = 2 * vec_a + vec_b
 
         xs = np.arange(np.min([v1[0], v2[0], v3[0], v4[0]]), np.max([v1[0], v2[0], v3[0], v4[0]]) + 1)
         ys = np.arange(np.min([v1[1], v2[1], v3[1], v4[1]]), np.max([v1[1], v2[1], v3[1], v4[1]]) + 1)
@@ -2807,7 +2824,7 @@ def double_cell(cell,
             istart_x = int(xzero - np.min(xs) + np.min(x))
             istart_y = int(yzero - np.min(ys) + np.min(y))
 
-            big_cell[istart_y:istart_y+dyc, istart_x:istart_x+dxc][np.logical_not(np.isnan(cell))] = \
+            big_cell[istart_y:istart_y + dyc, istart_x:istart_x + dxc][np.logical_not(np.isnan(cell))] = \
                 cell[np.logical_not(np.isnan(cell))]
 
     return big_cell, xs, ys
@@ -2956,7 +2973,8 @@ def test_in_cell(points,
 
     x, y = points
 
-    def line(x, p1, p2): return ((p2[1] - p1[1]) * x + p1[1] * p2[0] - p1[0] * p2[1]) / (p2[0] - p1[0])
+    def line(x, p1, p2):
+        return ((p2[1] - p1[1]) * x + p1[1] * p2[0] - p1[0] * p2[1]) / (p2[0] - p1[0])
 
     precision = 12
 
@@ -3090,7 +3108,8 @@ def convert_cell(cell1,
     for vec in [va1, vb1, va2, vb2]:
         for v in vec:
             if not float(v).is_integer():
-                raise ValueError("At least one component of va1, vb1, va2, or vb2 could not be interpreted as an integer")
+                raise ValueError(
+                    "At least one component of va1, vb1, va2, or vb2 could not be interpreted as an integer")
 
     cell2, x2, y2 = get_unit_cell(va2, vb2)
     y1min = y1.min()
@@ -3145,8 +3164,8 @@ def show_cell(v1,
     v2 = np.array(v2, copy=True).ravel()
 
     if not v1.dtype.kind in np.typecodes["AllInteger"] or \
-       not v2.dtype.kind in np.typecodes["AllInteger"]:
-       raise ValueError(f"v1 and v2 had data types '{v1.dtype}' and '{v2.dtype}', but both be type 'int'")
+            not v2.dtype.kind in np.typecodes["AllInteger"]:
+        raise ValueError(f"v1 and v2 had data types '{v1.dtype}' and '{v2.dtype}', but both be type 'int'")
 
     # plot
     fig = plt.figure(**kwargs)
@@ -3233,7 +3252,7 @@ def get_sim_angle(vec_a,
     recp_va, recp_vb = get_reciprocal_vects(vec_a, vec_b)
     angle = np.angle(recp_vb[0, 0] + 1j * recp_vb[1, 0])
 
-    return np.mod(angle, 2*np.pi)
+    return np.mod(angle, 2 * np.pi)
 
 
 def get_sim_period(vec_a,
@@ -3250,7 +3269,7 @@ def get_sim_period(vec_a,
 
     :return period:
     """
-    uvec_perp_a = np.array([vec_a[1], -vec_a[0]]) / np.sqrt(vec_a[0]**2 + vec_a[1]**2)
+    uvec_perp_a = np.array([vec_a[1], -vec_a[0]]) / np.sqrt(vec_a[0] ** 2 + vec_a[1] ** 2)
 
     # get period
     period = np.abs(uvec_perp_a.dot(vec_b))
@@ -3304,7 +3323,7 @@ def get_sim_phase(vec_a,
 
     phase = np.angle(fourier_component)
 
-    return np.mod(phase, 2*np.pi)
+    return np.mod(phase, 2 * np.pi)
 
 
 def get_lattice_dft_frqs(vec_a,
@@ -3367,7 +3386,8 @@ def get_lattice_dft(unit_cell,
         for jj in range(ldft.shape[1]):
             if np.isnan(bcell[ii, jj]):
                 continue
-            ldft[ii, jj] = np.nansum(unit_cell * np.exp(-1j*2*np.pi * (fvecs[ii, jj, 0] * xx + fvecs[ii, jj, 1] * yy)))
+            ldft[ii, jj] = np.nansum(
+                unit_cell * np.exp(-1j * 2 * np.pi * (fvecs[ii, jj, 0] * xx + fvecs[ii, jj, 1] * yy)))
 
     return ldft, f1, f2, fvecs
 
@@ -3409,7 +3429,7 @@ def get_pattern_fourier_component(unit_cell,
 
     # fourier component is integral over unit cell
     xxs, yys = np.meshgrid(x, y)
-    fcomponent = np.nansum(unit_cell * np.exp(-1j*2*np.pi * (frq_vector[0] * xxs + frq_vector[1] * yys)))
+    fcomponent = np.nansum(unit_cell * np.exp(-1j * 2 * np.pi * (frq_vector[0] * xxs + frq_vector[1] * yys)))
 
     # correct phase for start coord
     start_coord = np.array(vec_b) / nphases * phase_index
@@ -3624,13 +3644,12 @@ def get_intensity_fourier_components(unit_cell,
                 # wavelength * frq = theta in Fraunhofer approximation
                 uvec_in = xy2uvector(tin_x, tin_y, "in")
                 uvec_out = xy2uvector(tout_x + wavelength * vecs[ii, jj][0] / dx,
-                                                   tout_y + wavelength * vecs[ii, jj][1] / dy, "out")
+                                      tout_y + wavelength * vecs[ii, jj][1] / dy, "out")
                 # amb = uvec_in - uvec_out
                 bma = uvec_out - uvec_in
                 blaze_envelope[ii, jj] = blaze_envelope(wavelength, gamma, wx, wy, bma)
 
                 efield_fc[ii, jj] = efield_fc[ii, jj] * blaze_envelope[ii, jj]
-
 
     # divide by volume of unit cell (i.e. maximum possible Fourier component)
     with np.errstate(invalid='ignore'):
@@ -3648,7 +3667,7 @@ def get_intensity_fourier_components(unit_cell,
     intensity_fc = scipy.signal.fftconvolve(efield_fc, np.flip(efield_fc, axis=(0, 1)).conj(), mode='same')
     # enforce maximum allowable frequency (should only be machine precision errors)
     intensity_fc = intensity_fc * (frqs <= 1)
-    intensity_fc = intensity_fc * (frqs <= 2*fmax)
+    intensity_fc = intensity_fc * (frqs <= 2 * fmax)
 
     return intensity_fc, efield_fc, ns, ms, vecs
 
@@ -3739,7 +3758,7 @@ def get_intensity_fourier_components_xform(pattern,
 
             try:
                 efield_fc_xformed[ii, jj] = get_peak_value(pattern_xformed_ft, fxs, fys,
-                                                                 vecs_xformed[ii, jj], peak_pixel_size=2)
+                                                           vecs_xformed[ii, jj], peak_pixel_size=2)
             except ValueError:
                 efield_fc_xformed[ii, jj] = 0
 
@@ -3747,7 +3766,7 @@ def get_intensity_fourier_components_xform(pattern,
                 # wavelength * frq = theta in Fraunhofer approximation
                 uvec_in = xy2uvector(tin_x, tin_y, "in")
                 uvec_out = xy2uvector(tout_x + wavelength * vecs[ii, jj][0] / dx,
-                                                   tout_y + wavelength * vecs[ii, jj][1] / dy, "out")
+                                      tout_y + wavelength * vecs[ii, jj][1] / dy, "out")
                 # amb = uvec_in - uvec_out
                 bma = uvec_out - uvec_in
                 blaze_envelope[ii, jj] = blaze_envelope(wavelength, gamma, wx, wy, bma)
@@ -3771,7 +3790,7 @@ def get_intensity_fourier_components_xform(pattern,
                                                     np.flip(efield_fc_xformed, axis=(0, 1)).conj(),
                                                     mode='same')
     intensity_fc_xformed = intensity_fc_xformed * (frqs <= 1)
-    intensity_fc_xformed = intensity_fc_xformed * (frqs <= 2*fmax)
+    intensity_fc_xformed = intensity_fc_xformed * (frqs <= 2 * fmax)
 
     return intensity_fc_xformed, efield_fc_xformed, ns, ms, vecs, vecs_xformed
 
@@ -3823,7 +3842,7 @@ def show_fourier_components(vec_a,
     figh.suptitle(f"Pattern fourier weights versus position and reciprocal lattice vector\n"
                   f" va=({vec_a[0]:d}, {vec_a[1]:d});"
                   f" vb=({vec_b[0]:d}, {vec_b[1]}),"
-                  f" max efield frq=1/{1/fmax:.2f} 1/mirrors")
+                  f" max efield frq=1/{1 / fmax:.2f} 1/mirrors")
 
     marker_size = 2
 
@@ -3876,12 +3895,12 @@ def show_fourier_components(vec_a,
     ax.scatter([recp_va_reduced[0], recp_vb_reduced[0]], [recp_va_reduced[1], recp_vb_reduced[1]],
                edgecolor="m", facecolor="none")
 
-    ax.add_artist(Circle((0, 0), radius=(2*fmax), color='r', fill=0, ls='-'))
+    ax.add_artist(Circle((0, 0), radius=(2 * fmax), color='r', fill=0, ls='-'))
     ax.add_artist(Circle((0, 0), radius=fmax, color='r', fill=0, ls='-'))
 
     cb = plt.colorbar(im)
-    ax.set_xlim([-2*fmax, 2*fmax])
-    ax.set_ylim([-2*fmax, 2*fmax])
+    ax.set_xlim([-2 * fmax, 2 * fmax])
+    ax.set_ylim([-2 * fmax, 2 * fmax])
 
     ax.set_xlabel('$f_x$ (1/mirror)')
     ax.set_ylabel('$f_y$ (1/mirror)')
@@ -3920,7 +3939,7 @@ def show_fourier_components(vec_a,
 
     ylim = [plot_lims[0], plot_lims[1] * 1.2]
     ax.plot([fmax, fmax], ylim, 'k')
-    ax.plot([2*fmax, 2*fmax], ylim, 'k')
+    ax.plot([2 * fmax, 2 * fmax], ylim, 'k')
 
     ax.plot(vec_mag[to_plot_int], np.abs(int_fc[to_plot_int]), '.', label="I")
     ax.plot(vec_mag[to_plot_e], np.abs(efield_fc[to_plot_e]), 'x', label="E")
@@ -3967,10 +3986,10 @@ def reduce_basis(va,
     vb = np.array(vb, copy=True)
     vb = vb.reshape([2, ])
 
-    Ba = np.linalg.norm(va)**2
+    Ba = np.linalg.norm(va) ** 2
     mu = np.vdot(va, vb) / Ba
     vb = vb - np.round(mu) * va
-    Bb = np.linalg.norm(vb)**2
+    Bb = np.linalg.norm(vb) ** 2
 
     swapped = -1
     while Bb < Ba:
@@ -4046,7 +4065,7 @@ def get_closest_lattice_vec(point,
                 nar_min = na
                 nbr_min = nb
                 diff = diff_current
-                vec = na*var + nb*vbr
+                vec = na * var + nb * vbr
 
     # convert back to initial basis lattice vectors
     # get reciprocal vectors
@@ -4129,14 +4148,14 @@ def binarize(pattern_gray,
                 err = pattern_gray[ii, jj] - pattern_bin[ii, jj]
 
                 if jj < (nx - 1):
-                    pattern_gray[ii, jj+1] += err * 7/16
+                    pattern_gray[ii, jj + 1] += err * 7 / 16
 
                 if ii < (ny - 1):
                     if jj > 0:
-                        pattern_gray[ii + 1, jj - 1] += err * 3/16
-                    pattern_gray[ii + 1, jj] += err * 5/16
+                        pattern_gray[ii + 1, jj - 1] += err * 3 / 16
+                    pattern_gray[ii + 1, jj] += err * 5 / 16
                     if jj < (ny - 1):
-                        pattern_gray[ii + 1, jj + 1] += err * 1/16
+                        pattern_gray[ii + 1, jj + 1] += err * 1 / 16
     elif mode == "jjn":
         # error diffusion Kernel =
         # 1/48 * [[_, _, #, 7, 5], [3, 5, 7, 5, 3], [1, 3, 5, 3, 1]]
@@ -4148,39 +4167,39 @@ def binarize(pattern_gray,
                 err = pattern_gray[ii, jj] - pattern_bin[ii, jj]
 
                 if jj < (nx - 1):
-                    pattern_gray[ii, jj + 1] += err * 7/48
+                    pattern_gray[ii, jj + 1] += err * 7 / 48
                 if jj < (nx - 2):
-                    pattern_gray[ii, jj + 2] += err * 5/48
+                    pattern_gray[ii, jj + 2] += err * 5 / 48
 
                 if ii < (ny - 1):
                     if jj > 1:
-                        pattern_gray[ii + 1, jj - 2] += err * 3/48
+                        pattern_gray[ii + 1, jj - 2] += err * 3 / 48
 
                     if jj > 0:
-                        pattern_gray[ii + 1, jj - 1] += err * 5/48
+                        pattern_gray[ii + 1, jj - 1] += err * 5 / 48
 
-                    pattern_gray[ii + 1, jj] += err * 7/48
+                    pattern_gray[ii + 1, jj] += err * 7 / 48
 
                     if jj < (ny - 1):
-                        pattern_gray[ii + 1, jj + 1] += err * 5/48
+                        pattern_gray[ii + 1, jj + 1] += err * 5 / 48
 
                     if jj < (ny - 2):
-                        pattern_gray[ii + 1, jj + 2] += err * 3/48
+                        pattern_gray[ii + 1, jj + 2] += err * 3 / 48
 
             if ii < (ny - 2):
                 if jj > 1:
-                    pattern_gray[ii + 2, jj - 2] += err * 1/48
+                    pattern_gray[ii + 2, jj - 2] += err * 1 / 48
 
                 if jj > 0:
-                    pattern_gray[ii + 2, jj - 1] += err * 3/48
+                    pattern_gray[ii + 2, jj - 1] += err * 3 / 48
 
-                pattern_gray[ii + 2, jj] += err * 5/48
+                pattern_gray[ii + 2, jj] += err * 5 / 48
 
                 if jj < (ny - 1):
-                    pattern_gray[ii + 2, jj + 1] += err * 3/48
+                    pattern_gray[ii + 2, jj + 1] += err * 3 / 48
 
                 if jj < (ny - 2):
-                    pattern_gray[ii + 2, jj + 2] += err * 1/48
+                    pattern_gray[ii + 2, jj + 2] += err * 1 / 48
 
     elif mode == "random":
         pattern_bin = np.asarray(np.random.binomial(1, pattern_gray), dtype=bool)
@@ -4207,7 +4226,7 @@ def min_angle_diff(angle1,
     """
 
     # take difference modulo 2pi, which gives positive distance
-    angle_diff = np.asarray(np.mod(angle1 - angle2, 2*np.pi))
+    angle_diff = np.asarray(np.mod(angle1 - angle2, 2 * np.pi))
 
     # still want smallest magnitude difference (negative or positive). If larger than pi, can express as smaller
     # magnitude negative distance
@@ -4273,9 +4292,9 @@ def find_closest_multicolor_set(period: float,
                                 wavelengths: list = None,
                                 bvec_max_size: int = 40,
                                 avec_max_size: int = 40,
-                                atol: float = np.pi/180,
+                                atol: float = np.pi / 180,
                                 ptol_relative: float = 0.1,
-                                angle_sep_tol: float = 5*np.pi/180,
+                                angle_sep_tol: float = 5 * np.pi / 180,
                                 max_solutions_to_search: int = 20,
                                 pitch: float = 7560.,
                                 minimize_leakage: bool = True):
@@ -4376,7 +4395,8 @@ def find_closest_multicolor_set(period: float,
     angle_sets = angles[sets_inds]
 
     # get rid of any where separation between n-1 and 0th is too large
-    too_big = np.abs(min_angle_diff(angle_sets[:, 0], angle_sets[:, nangles - 1], mode='half') - expected_angle_sep) > angle_sep_tol
+    too_big = np.abs(
+        min_angle_diff(angle_sets[:, 0], angle_sets[:, nangles - 1], mode='half') - expected_angle_sep) > angle_sep_tol
 
     # cost on bvector norms
     bvs_norms = np.array([np.linalg.norm(bv) for bv in bvs_kept[0]])
@@ -4491,7 +4511,7 @@ def find_allowed_angles(period: float,
 
         dxb, dyb = np.meshgrid(dxs, dys)
     # exclude vb = [0, 0]
-    dxb, dyb = dxb[dxb**2 + dyb**2 > 0], dyb[dxb**2 + dyb**2 > 0]
+    dxb, dyb = dxb[dxb ** 2 + dyb ** 2 > 0], dyb[dxb ** 2 + dyb ** 2 > 0]
 
     # (1) P = dxb * cos(theta) + dyb * sin(theta)
     # (2) P = dxb * x + dyb * sqrt(1-x**2)
@@ -4501,21 +4521,21 @@ def find_allowed_angles(period: float,
     # two solutions, expect one in [0, pi/2] and one in [pi/2, pi].
     # BUT it is possible these are not both solutions to the original equation. This can happen if the portion in
     # paranetheses on the LHS of (3) is negative
-    A = dxb**2 + dyb**2
+    A = dxb ** 2 + dyb ** 2
     B = - 2 * period * dxb
-    C = period**2 - dyb**2
+    C = period ** 2 - dyb ** 2
 
     with np.errstate(invalid='ignore'):
         # get solutions to the squared problem
-        x1 = 0.5 * (-B + np.sqrt(B**2 - 4 * A * C)) / A
+        x1 = 0.5 * (-B + np.sqrt(B ** 2 - 4 * A * C)) / A
         # only keep ones that also satisfy the base problem
-        x1[np.abs(dxb * x1 + dyb * np.sqrt(1 - x1**2) - period) > 1e-7] = np.nan
-        x2 = 0.5 * (-B - np.sqrt(B**2 - 4 * A * C)) / A
+        x1[np.abs(dxb * x1 + dyb * np.sqrt(1 - x1 ** 2) - period) > 1e-7] = np.nan
+        x2 = 0.5 * (-B - np.sqrt(B ** 2 - 4 * A * C)) / A
         x2[np.abs(dxb * x2 + dyb * np.sqrt(1 - x2 ** 2) - period) > 1e-7] = np.nan
         # also negative period solutions. Only change here is B -> -B
-        x3 = 0.5 * (B + np.sqrt(B**2 - 4 * A * C)) / A
+        x3 = 0.5 * (B + np.sqrt(B ** 2 - 4 * A * C)) / A
         x3[np.abs(dxb * x3 + dyb * np.sqrt(1 - x3 ** 2) + period) > 1e-7] = np.nan
-        x4 = 0.5 * (B - np.sqrt(B**2 - 4 * A * C)) / A
+        x4 = 0.5 * (B - np.sqrt(B ** 2 - 4 * A * C)) / A
         x4[np.abs(dxb * x4 + dyb * np.sqrt(1 - x4 ** 2) + period) > 1e-7] = np.nan
 
         # get final angles and vectors
@@ -4553,18 +4573,18 @@ def find_rational_approx_angle(angle: float,
 
     # todo: how to simplify these cases
     # first convert angle to [0, pi/2], so can do rational approximation for positive fraction
-    angle_2p = np.mod(angle, 2*np.pi)
-    if angle_2p <= np.pi/2:
+    angle_2p = np.mod(angle, 2 * np.pi)
+    if angle_2p <= np.pi / 2:
         angle_pos = angle_2p
         case = 1
-    elif angle_2p > np.pi/2 and angle_2p <= np.pi:
+    elif angle_2p > np.pi / 2 and angle_2p <= np.pi:
         angle_pos = np.pi - angle_2p
         case = 2
-    elif angle_2p > np.pi and angle_2p <= 3*np.pi/2:
+    elif angle_2p > np.pi and angle_2p <= 3 * np.pi / 2:
         angle_pos = angle_2p - np.pi
         case = 3
-    elif angle_2p > 3*np.pi/2 and angle_2p <= 2*np.pi:
-        angle_pos = 2*np.pi - angle_2p
+    elif angle_2p > 3 * np.pi / 2 and angle_2p <= 2 * np.pi:
+        angle_pos = 2 * np.pi - angle_2p
         case = 4
     else:
         raise ValueError('disallowed angle')
@@ -4599,7 +4619,7 @@ def find_rational_approx_angle(angle: float,
             if approximate_seq == []:
                 approximate_seq.append(fr_ub)
             else:
-                current_est = mediant_num/mediant_denom
+                current_est = mediant_num / mediant_denom
                 best_est = approximate_seq[-1][0] / approximate_seq[-1][1]
                 if np.abs(current_est - slope) <= np.abs(best_est - slope):
                     approximate_seq.append(fr_ub)
@@ -4739,7 +4759,9 @@ def find_nearest_leakage_peaks(vec_as,
                 vec = n * recp_vects[jj][0] + m * recp_vects[jj][1]
 
                 # peak weight is the Fourier transform over the unit cell (divided by the DC component)
-                weight = np.abs(np.nansum(cells[jj] * np.exp(1j * 2 * np.pi * (vec[0] * xxs[jj] + vec[1] * yys[jj]))) / np.nansum(cells[jj]))
+                weight = np.abs(
+                    np.nansum(cells[jj] * np.exp(1j * 2 * np.pi * (vec[0] * xxs[jj] + vec[1] * yys[jj]))) / np.nansum(
+                        cells[jj]))
                 # if weight is too small, don't count distance
                 if weight < minimum_relative_peak_size:
                     continue
@@ -4864,7 +4886,7 @@ def plot_sim_pattern_sets(patterns,
 
     if wavelength is not None:
         figh.suptitle(f"sim pattern diagnostic, wavelength = {wavelength:.0f}nm,"
-                     f" min leakage angle={min_leakage_angle * 180/np.pi:.3f}deg")
+                      f" min leakage angle={min_leakage_angle * 180 / np.pi:.3f}deg")
     else:
         figh.suptitle(f"sim pattern diagnostic, min leakage angle = {min_leakage_angle:.3f}")
 
@@ -4903,7 +4925,7 @@ def plot_sim_pattern_sets(patterns,
         ax = figh.add_subplot(grid[nphases, ii])
         # 2D window from broadcasting
         apodization = np.expand_dims(scipy.signal.windows.hann(nx), axis=0) * \
-                 np.expand_dims(scipy.signal.windows.hann(ny), axis=1)
+                      np.expand_dims(scipy.signal.windows.hann(ny), axis=1)
 
         ft = fft.fftshift(fft.fft2(fft.ifftshift(patterns[ii, 0] * apodization)))
         ax.imshow(np.abs(ft) / np.abs(ft).max(), norm=PowerNorm(gamma=0.1), extent=extent, cmap="bone")
@@ -4980,12 +5002,14 @@ def export_pattern_set(dmd_size: list,
             # save file
             # need to convert so not float to save as PNG
             im = Image.fromarray(patterns[ii, jj].astype('bool'))
-            im.save(save_dir / f"{ind:02d}_period={periods[ii]:.2f}_angle={angles[ii] * 180/np.pi:.1f}deg_phase={phases[ii, jj]:.2f}.png")
+            im.save(
+                save_dir / f"{ind:02d}_period={periods[ii]:.2f}_angle={angles[ii] * 180 / np.pi:.1f}deg_phase={phases[ii, jj]:.2f}.png")
 
     # save patterns in tif stack
     fpath = save_dir / f"sim_patterns_period={np.mean(periods):.2f}_nangles={nangles:d}_nphases={nphases:d}.tif"
     tifffile.imwrite(fpath,
-                     tifffile.transpose_axes(patterns.astype(np.uint8).reshape((nangles * nphases, ny, nx)), "CYX", asaxes="TZQCYXS"),
+                     tifffile.transpose_axes(patterns.astype(np.uint8).reshape((nangles * nphases, ny, nx)), "CYX",
+                                             asaxes="TZQCYXS"),
                      imagej=True)
     # im_list = [Image.fromarray(patterns[ii, jj].astype('bool')) for ii in range(nangles) for jj in range(nphases)]
     # im_list[0].save(fpath, save_all=True, append_images=im_list[1:])
@@ -5004,7 +5028,7 @@ def export_all_pattern_sets(dmd_size: list,
                             periods: list,
                             nangles: int = 3,
                             nphases: int = 3,
-                            wavelengths: list=None,
+                            wavelengths: list = None,
                             invert: list = False,
                             pitch: float = 7560.,
                             save_dir='sim_patterns',
@@ -5121,16 +5145,17 @@ def aberration_map_pattern(dmd_size: list,
     xx, yy = np.meshgrid(range(pattern_patches.shape[2]), range(pattern_patches.shape[1]))
     xx = xx - xx.mean()
     yy = yy - yy.mean()
-    pattern_patches[:, np.sqrt(xx**2 + yy**2) > radius] = 0
+    pattern_patches[:, np.sqrt(xx ** 2 + yy ** 2) > radius] = 0
 
     # get pattern
     nx, ny = dmd_size
     pattern = np.zeros((ny, nx))
     for ii in range(len(centers)):
         pattern[centers[ii, 1] - radius: centers[ii, 1] + radius + 1,
-                centers[ii, 0] - radius: centers[ii, 0] + radius + 1] = pattern_patches[phase_indices[ii]]
+        centers[ii, 0] - radius: centers[ii, 0] + radius + 1] = pattern_patches[phase_indices[ii]]
 
     return pattern
+
 
 def checkerboard(dmd_size: list,
                  n_on: int,
@@ -5196,7 +5221,7 @@ def export_calibration_patterns(dmd_size: list,
     xx, yy = np.meshgrid(range(nx), range(ny))
     xc = (nx - 1) / 2
     yc = (ny - 1) / 2
-    rr = np.sqrt((xx - xc)**2 + (yy - yc)**2)
+    rr = np.sqrt((xx - xc) ** 2 + (yy - yc) ** 2)
     for r in circle_radii:
         mask = np.zeros((ny, nx))
         mask[rr <= r] = 1
@@ -5317,7 +5342,7 @@ def get_affine_fit_pattern(dmd_size: list,
         # block displaced along x-axis
         xstart1 = cx - mark_sep
         xend1 = xstart1 + corner_size
-        ystart1 = cy - corner_size//2
+        ystart1 = cy - corner_size // 2
         yend1 = ystart1 + corner_size
         mask[ystart1:yend1, xstart1:xend1] = 1
 
@@ -5329,16 +5354,16 @@ def get_affine_fit_pattern(dmd_size: list,
         mask[ystart4:yend4, xstart4:xend4] = 1
 
         # central block
-        xstart2 = cx - corner_size//2
+        xstart2 = cx - corner_size // 2
         xend2 = xstart2 + corner_size
         ystart2 = cy - mark_sep
         yend2 = ystart2 + corner_size
         mask[ystart2:yend2, xstart2:xend2] = 1
 
         # block displaced along y-axis
-        xstart3 = cx - corner_size//2
+        xstart3 = cx - corner_size // 2
         xend3 = xstart3 + corner_size
-        ystart3 = cy - corner_size//2
+        ystart3 = cy - corner_size // 2
         yend3 = ystart3 + corner_size
         mask[ystart3:yend3, xstart3:xend3] = 1
 
@@ -5381,7 +5406,7 @@ def export_otf_test_set(dmd_size: list,
     fmin = 1 / pmax
     fmax = 1 / pmin
     frqs = np.linspace(fmin, fmax, nperiods)
-    periods = np.flip(1/frqs)
+    periods = np.flip(1 / frqs)
 
     angles = np.arange(nangles) * np.pi / nangles
 
@@ -5437,7 +5462,7 @@ def export_otf_test_set(dmd_size: list,
                 'phase_index': phase_index,
                 'units': 'um',
                 'notes': 'total number of patterns should be nphases*nangles + 2.'
-                                        ' The last two patterns are all ON and all OFF respectively.'}
+                         ' The last two patterns are all ON and all OFF respectively.'}
 
         # with open(fpath, 'wb') as f:
         #     pickle.dump(data, f)
@@ -5448,7 +5473,7 @@ def export_otf_test_set(dmd_size: list,
         for ii in range(nperiods):
             for jj in range(nangles):
                 ind = ii * nangles + jj
-                fpath = save_dir / f"{ind:03d}_pattern_period={real_periods[ii, jj]:.3f}_angle={real_angles[ii, jj] * 180/np.pi:.2f}deg.png"
+                fpath = save_dir / f"{ind:03d}_pattern_period={real_periods[ii, jj]:.3f}_angle={real_angles[ii, jj] * 180 / np.pi:.2f}deg.png"
 
                 # need to convert so not float to save as PNG
                 im = Image.fromarray(patterns[ii, jj].astype('bool'))
@@ -5475,4 +5500,3 @@ def export_otf_test_set(dmd_size: list,
         tifffile.imwrite(fpath, patterns_reshaped.astype(np.uint16))
 
     return patterns, vec_as, vec_bs, real_angles, real_periods
-

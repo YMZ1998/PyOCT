@@ -5,7 +5,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 N_SPECTRAL = 2048
 N_ASCANS = 256
 LAMBDA_MIN_NM = 1250.0
@@ -19,7 +18,7 @@ def camera_wavenumbers():
     wavelength_center = (LAMBDA_MIN_NM + LAMBDA_MAX_NM) / 2
     wavelength_half_span = (LAMBDA_MAX_NM - LAMBDA_MIN_NM) / 2
     wavelength_nm = (
-        wavelength_center + wavelength_half_span * pixel + 2.0 * pixel**3
+            wavelength_center + wavelength_half_span * pixel + 2.0 * pixel ** 3
     )
     return 2 * np.pi / (wavelength_nm * 1e-9)
 
@@ -84,7 +83,7 @@ def simulate_raw_bscan(rng):
         phases = rng.uniform(0, 2 * np.pi, depths.size)
         attenuation = np.exp(-(depths - surface_m) / 0.75e-3)
         for depth, amplitude, phase, decay in zip(
-            depths, amplitudes, phases, attenuation
+                depths, amplitudes, phases, attenuation
         ):
             add_reflector(fringe, k_camera, depth, amplitude * decay, phase)
 
@@ -93,7 +92,7 @@ def simulate_raw_bscan(rng):
             lateral_psf = np.exp(-0.5 * ((lateral_mm - bead_x) / 0.025) ** 2)
             add_reflector(
                 fringe, k_camera, bead_z * 1e-3,
-                amplitude * lateral_psf, phase=0.25,
+                                  amplitude * lateral_psf, phase=0.25,
             )
 
         expected = np.maximum(

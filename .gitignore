@@ -1,3 +1,5 @@
 __pycache__/
 *.py[cod]
 .idea/
+simulated_oct_bscan.png
+*.png

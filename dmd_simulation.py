@@ -73,7 +73,10 @@ from pathlib import Path
 import pickle
 import numpy as np
 from numpy import fft
-import joblib
+try:
+    import joblib
+except ImportError:
+    joblib = None
 import matplotlib.pyplot as plt
 from matplotlib.colors import PowerNorm
 from matplotlib.patches import Circle
@@ -92,6 +95,15 @@ try:
     import cupy as cp
 except ImportError:
     _cupy_available = False
+
+
+def _parallel_map(function, values):
+    """Use joblib when installed, otherwise run the same work sequentially."""
+    if joblib is None:
+        return [function(value) for value in values]
+    return joblib.Parallel(n_jobs=-1, verbose=1, timeout=None)(
+        joblib.delayed(function)(value) for value in values
+    )
 
 def get_centered_roi(centers: Sequence,
                      sizes: Sequence[int],
@@ -537,8 +549,7 @@ def simulate_dmd(pattern,
     bvecs_to_iterate = np.reshape(uvecs_out, [np.prod(output_shape), 3])
 
     # simulate
-    results = joblib.Parallel(n_jobs=-1, verbose=1, timeout=None)(
-        joblib.delayed(calc_output_angle)(bvec) for bvec in bvecs_to_iterate)
+    results = _parallel_map(calc_output_angle, bvecs_to_iterate)
     # unpack results for all output directions
     efields, sinc_efield_on, sinc_efield_off = zip(*results)
     efields = np.asarray(efields).reshape(output_shape)
@@ -707,8 +718,7 @@ def interpolate_dmd_data(pattern,
                       np.expand_dims(dft_interp_1d(dy, bma[ind][1], ny, fys), axis=1))
         return val
 
-    results = joblib.Parallel(n_jobs=-1, verbose=1, timeout=None)(
-        joblib.delayed(calc)(ii) for ii in range(nvecs))
+    results = _parallel_map(calc, range(nvecs))
     efields = np.array(results).reshape(output_shape)
 
     return efields
@@ -786,8 +796,10 @@ def get_diffracted_power(pattern,
 
     orders_x = ns[allowed_any, 0]
     orders_y = ns[allowed_any, 1]
-    results = joblib.Parallel(n_jobs=-1, verbose=1, timeout=None)(
-        joblib.delayed(calc_power_order)((orders_x[ii], orders_y[ii])) for ii in range(len(orders_x)))
+    results = _parallel_map(
+        calc_power_order,
+        ((orders_x[ii], orders_y[ii]) for ii in range(len(orders_x))),
+    )
 
     power_out_orders, on_sum_orders, off_sum_orders = zip(*results)
     power_out = np.sum(power_out_orders)
@@ -3728,7 +3740,7 @@ def get_intensity_fourier_components_xform(pattern,
             try:
                 efield_fc_xformed[ii, jj] = get_peak_value(pattern_xformed_ft, fxs, fys,
                                                                  vecs_xformed[ii, jj], peak_pixel_size=2)
-            except:  # todo: what exception is this supposed to catch?
+            except ValueError:
                 efield_fc_xformed[ii, jj] = 0
 
             if include_blaze_correction:

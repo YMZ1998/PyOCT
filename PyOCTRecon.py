@@ -534,7 +534,7 @@ class Batch_OCTProcessing():
         self.Ascans = Ascans
         self.Frames = Frames 
         self.Segments = int(np.trunc(np.floor(self.Frames/self.ChunkSize))) 
-        self.data = np.zeros((np.size(depths),self.Ascans,self.Frames),dtype=np.complex)
+        self.data = np.zeros((np.size(depths),self.Ascans,self.Frames),dtype=np.complex128)
         self.Settings = Settings 
         _time01 = time.time()
         if verbose:
@@ -549,14 +549,14 @@ class Batch_OCTProcessing():
                 if verbose:
                     for key in self.Settings.keys():
                         print("{}: {}".format(key,self.Settings[key]))
-            self.data[:,:,i*self.ChunkSize+np.arange(0,self.ChunkSize,step=1,dtype=np.int)] = np.reshape(self.OCTRe.data,(np.size(self.Settings['depths']),self.Settings['Ascans'],int(np.size(self.OCTRe.data)/(np.size(self.Settings['depths'])*self.Settings['Ascans'])))) 
+            self.data[:,:,i*self.ChunkSize+np.arange(0,self.ChunkSize,step=1,dtype=int)] = np.reshape(self.OCTRe.data,(np.size(self.Settings['depths']),self.Settings['Ascans'],int(np.size(self.OCTRe.data)/(np.size(self.Settings['depths'])*self.Settings['Ascans']))))
         if (self.Segments*self.ChunkSize - self.Frames) != 0:
             diff = int(self.Frames-self.Segments*self.ChunkSize)
             if diff < 0:
                 raise ValueError("Segmentation is not Right ! Check ChunkSize!")
             else:
                 self.OCTRe = OCTImagingProcessing(root_dir=root_dir, SampleData=SampleData, Settings=None, sampleID=sampleID,bkgndID=bkgndID,Sample_sub_path=Sample_sub_path,Bkgnd_sub_path=Bkgnd_sub_path,saveOption=saveOption,saveFolder=saveFolder,RorC='complex',verbose=False, frames=diff,alpha2=alpha2,alpha3=alpha3,depths=depths,gamma=gamma,wavelegnth=wavelegnth,XYConversion=XYConversion,camera_matrix=camera_matrix,start_frame=self.Segments*self.ChunkSize+1, singlePrecision=singlePrecision, OptimizingDC=False,ReconstructionMethods=ReconstructionMethods)
-                self.data[:,:,(self.Segments)*self.ChunkSize+np.arange(0,diff,step=1,dtype=np.int)] = np.reshape(self.OCTRe.data,(np.size(self.Settings['depths']),self.Settings['Ascans'],int(np.size(self.OCTRe.data)/(np.size(self.Settings['depths'])*self.Settings['Ascans'])))) 
+                self.data[:,:,(self.Segments)*self.ChunkSize+np.arange(0,diff,step=1,dtype=int)] = np.reshape(self.OCTRe.data,(np.size(self.Settings['depths']),self.Settings['Ascans'],int(np.size(self.OCTRe.data)/(np.size(self.Settings['depths'])*self.Settings['Ascans']))))
         if downPrecision:
             self.data = self.data.astype(np.complex64)
         
@@ -625,6 +625,28 @@ def optimize_dispersion(reconstruction, initial_alpha2=-50, initial_alpha3=-12):
     return best_image.astype(np.float32), best[0], best[1], best_score
 
 
+def estimate_oct_snr(image):
+    """Estimate OCT SNR in dB from robust signal and noise regions.
+
+    Horizontal fixed-pattern content is removed per depth row. Signal amplitude
+    is the 99.9th percentile outside the top 10%, while noise is the RMS of the
+    deepest 25% of the image. SNR is reported as 20*log10(signal/noise).
+    """
+    image = np.asarray(np.squeeze(image), dtype=np.float64)
+    if image.ndim != 2:
+        raise ValueError("SNR calculation expects a 2-D OCT frame")
+
+    corrected = image - np.median(image, axis=1, keepdims=True)
+    depth = corrected.shape[0]
+    signal_region = np.abs(corrected[max(1, depth // 10):, :])
+    noise_region = corrected[max(1, 3 * depth // 4):, :]
+    signal_amplitude = float(np.percentile(signal_region, 99.9))
+    noise_rms = float(np.sqrt(np.mean(noise_region**2)))
+    if noise_rms <= np.finfo(float).eps:
+        return float('inf')
+    return float(20 * np.log10(signal_amplitude / noise_rms))
+
+
 def save_optimization_comparison(reconstruction, optimized, alpha2, alpha3,
                                  score, output_path):
     """Save baseline and optimized reconstructions with identical display limits."""
@@ -633,24 +655,47 @@ def save_optimization_comparison(reconstruction, optimized, alpha2, alpha3,
     gamma = reconstruction.Settings['gamma']
     baseline_display = baseline**gamma
     optimized_display = optimized**gamma
+    baseline_snr = estimate_oct_snr(baseline)
+    optimized_snr = estimate_oct_snr(optimized)
+    snr_improvement = optimized_snr - baseline_snr
     combined = np.concatenate((baseline_display.ravel(), optimized_display.ravel()))
     vmin, vmax = np.percentile(combined, [1, 99.8])
 
-    figure, axes = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
+    difference = optimized_display - baseline_display
+    difference_limit = np.percentile(np.abs(difference), 99.5)
+    if difference_limit <= np.finfo(float).eps:
+        difference_limit = 1.0
+    mean_absolute_difference = float(np.mean(np.abs(difference)))
+
+    figure, axes = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
     panels = [
-        (baseline_display, "Baseline (alpha2=-50, alpha3=-12)"),
+        (baseline_display,
+         f"Baseline (alpha2=-50, alpha3=-12)\nSNR={baseline_snr:.2f} dB"),
         (optimized_display,
-         f"Optimized (alpha2={alpha2:.1f}, alpha3={alpha3:.1f})"),
+         f"Optimized (alpha2={alpha2:.1f}, alpha3={alpha3:.1f})"
+         f"\nSNR={optimized_snr:.2f} dB ({snr_improvement:+.2f} dB)"),
     ]
     for axis, (image, title) in zip(axes, panels):
         axis.imshow(image, cmap='gray', aspect='auto', vmin=vmin, vmax=vmax)
         axis.set_title(title)
         axis.set_xlabel('x (pixels)')
+    difference_image = axes[2].imshow(
+        difference,
+        cmap='gray',
+        aspect='auto',
+        vmin=-difference_limit,
+        vmax=difference_limit,
+    )
+    axes[2].set_title(
+        f"Optimized - baseline\nmean absolute difference={mean_absolute_difference:.4g}"
+    )
+    axes[2].set_xlabel('x (pixels)')
+    figure.colorbar(difference_image, ax=axes[2], fraction=0.046, pad=0.04)
     axes[0].set_ylabel('z (pixels)')
     figure.suptitle(f"OCT dispersion comparison; sharpness={score:.5g}")
     figure.tight_layout()
     figure.savefig(output_path, dpi=180, bbox_inches='tight')
-    return figure
+    return figure, baseline_snr, optimized_snr
 
 
 def run_default_reconstruction():
@@ -709,7 +754,7 @@ def run_default_reconstruction():
         f"alpha3={best_alpha3:.1f}, sharpness={best_score:.5g}"
     )
     output_path = data_dir / f"{sample_id}_optimization_comparison.png"
-    save_optimization_comparison(
+    _, baseline_snr, optimized_snr = save_optimization_comparison(
         reconstruction,
         optimized,
         best_alpha2,
@@ -717,9 +762,10 @@ def run_default_reconstruction():
         best_score,
         output_path,
     )
+    print(f"Baseline SNR: {baseline_snr:.2f} dB")
+    print(f"Optimized SNR: {optimized_snr:.2f} dB")
+    print(f"SNR improvement: {optimized_snr - baseline_snr:+.2f} dB")
     plt.show()
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=180, bbox_inches='tight')
     print(f"Optimization comparison saved to: {output_path}")
     return reconstruction
 

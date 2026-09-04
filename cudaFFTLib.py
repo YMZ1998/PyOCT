@@ -3,15 +3,25 @@
 Fourier transform on GPU 
 """
 import numpy as np 
-import pycuda.autoinit 
-import pycuda.gpuarray as gpuarray 
-import skcuda.fft as cu_fft 
+try:
+    import pycuda.autoinit
+    import pycuda.gpuarray as gpuarray
+    import skcuda.fft as cu_fft
+    CUDA_AVAILABLE = True
+except ImportError:
+    gpuarray = None
+    cu_fft = None
+    CUDA_AVAILABLE = False
+
 def fft2_gpu_c2c(x,fftshift=True):
     """
     C2C FFT
     This function produce an output that is compatible with numpy.fft.fft2.
     The input x is a 2D numpy array 
     """
+    if not CUDA_AVAILABLE:
+        output = np.fft.fft2(x)
+        return np.fft.fftshift(output) if fftshift else output
     if x.dtype != np.complex128:
         x = x.astype(np.complex128)
     #get the shape of the initial numpy array 
@@ -23,8 +33,7 @@ def fft2_gpu_c2c(x,fftshift=True):
     plan_forward = cu_fft.Plan((n1,n2),np.complex128,np.complex128)
     cu_fft.fft(xgpu,y,plan_forward) 
 
-    #Must divide by the total number of pixels in the image to get the normalization right 
-    yout = y.get()/n1/n2
+    yout = y.get()
     if fftshift:
         yout = np.fft.fftshift(yout)
     return yout 
@@ -34,6 +43,9 @@ def fft2_gpu(x,fftshift=False):
     This function produce an output that is compatible with numpy.fft.fft2.
     The input x is a 2D numpy array 
     """
+    if not CUDA_AVAILABLE:
+        output = np.fft.fft2(x)
+        return np.fft.fftshift(output) if fftshift else output
     #converting the input array to single precision float 
     if x.dtype != "float64":
         x = x.astype(np.float64)
@@ -66,8 +78,6 @@ def fft2_gpu(x,fftshift=False):
     else:
         #odd 
         right = np.roll(np.fliplr(np.flipud(left))[:,:-1],1,axis=0)
-    print(right.shape)
-    print(left.shape)
     #get a numpy array back to compatible with np.fft 
     if fftshift is False:
         yout = np.hstack((left,right))
@@ -83,6 +93,9 @@ def ifft2_gpu(y,fftshift=False):
     The input y is a 2D complex numpy array 
     """
 
+    if not CUDA_AVAILABLE:
+        source = np.fft.ifftshift(y) if fftshift else y
+        return np.fft.ifft2(source)
     #get the shape of the initial numpy array 
     n1, n2 = y.shape 
 
@@ -115,7 +128,7 @@ def ifft2_gpu(y,fftshift=False):
 if __name__ == "__main__":
     from skimage import color, data 
     import matplotlib.pyplot as plt 
-    from PyOCT import misc 
+    import misc
     Test = False
     if Test:
         import h5py as hp 

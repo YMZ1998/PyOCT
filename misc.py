@@ -12,7 +12,7 @@ import matplotlib
 from matplotlib.widgets import Slider
 import re 
 import h5py
-from scipy.linalg.misc import norm 
+from numpy.linalg import norm
 from scipy.signal import fftconvolve
 import matplotlib.patches as patches
 import cv2 
@@ -23,11 +23,9 @@ import matplotlib.colors
 from matplotlib import cm 
 import math 
 from scipy.optimize import curve_fit 
-from lmfit import Model 
 import scipy.io 
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import copy 
-from cellpose import models
 import skimage.filters
 from PIL import Image
 """
@@ -659,6 +657,10 @@ def fwhm(x,y):
     return width 
 
 def gauss_fwhm2(x,y,showDetail=False):
+    try:
+        from lmfit import Model
+    except ImportError as exc:
+        raise ImportError("gauss_fwhm2 requires the optional 'lmfit' package") from exc
     cont_bi = np.sqrt(2*np.log(2))
     xsize = np.size(x) 
     amp = np.amax(y) 
@@ -813,15 +815,15 @@ def LoadMat(filePath,verbose=True,**kwargs):
         if verbose:
             print("keys are: {}".format(dataFile["data"].keys())) 
         if "keys" in kwargs:
-            return dataFile["data"][eval(keys)]
+            return dataFile["data"][kwargs["keys"]]
         else:
             return dataFile
-    except:
+    except OSError:
         data = scipy.io.loadmat(filePath)
         if verbose:
             print(data.keys())
         if "keys" in kwargs:
-            return data["data"][eval(keys)] 
+            return data["data"][kwargs["keys"]]
         else:
             return data
 
@@ -864,6 +866,10 @@ def quandraticFit2d(input,verbose=False):
     return zxy
 
 def cellSeg(img,blur=True,verbose=False):
+    try:
+        from cellpose import models
+    except ImportError as exc:
+        raise ImportError("cellSeg requires the optional 'cellpose' package") from exc
     if blur:
         img = skimage.filters.gaussian(img,sigma=5)
     img = np.asarray((img - np.amin(img))/(np.amax(img)-np.amin(img)) * 255,dtype=np.uint16) 
@@ -957,7 +963,7 @@ def MotionCorrection(img,preProcess=False,pw_rigid=True,**kwargs):
     
 
     mc = cam.motion_correction.MotionCorrect(out, max_shifts=max_shifts,num_frames_split = num_frames_split,
-                  strides=strides, overlaps=overlaps,pw_rigid = pw_rigid,use_cuda=True,
+                  strides=strides, overlaps=overlaps,pw_rigid = pw_rigid,use_cuda=False,
                   max_deviation_rigid=max_deviation_rigid, 
                   shifts_opencv=shifts_opencv, nonneg_movie=True,
                   border_nan=border_nan)

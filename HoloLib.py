@@ -7,7 +7,10 @@ import h5py as hp
 from . import pyTorch_holo as pTH
 from skimage.restoration import unwrap_phase 
 from time import gmtime, strftime 
-import lmfit 
+try:
+    import lmfit
+except ImportError:
+    lmfit = None
 import os 
 import pathlib
 from scipy import ndimage 
@@ -17,6 +20,11 @@ from scipy.ndimage import median_filter
 VALID_FIT_OFFSETS = ["fit", "gauss", "mean", "mode"]
 #: valid values for keyword argument `fit_profile` in :func:`estimate`
 VALID_FIT_PROFILES = ["offset", "poly2o", "tilt"]
+
+
+def _require_lmfit():
+    if lmfit is None:
+        raise ImportError("This fitting operation requires the optional 'lmfit' package")
 
 def find_sideband(ft_data, which=+1, copy=True,returnIndx = False):
     """Find the side band position of a hologram
@@ -459,12 +467,12 @@ def PhaseReconstruction_Batch(inputData,batchSize=50,cr=0.5,trans=False,ref=np.e
             if np.size(ref) == 0:
                 try:   
                     output[NumGroup*batchSize + tmp_xrange,:,:],_,out_int[NumGroup*batchSize + tmp_xrange], mi, mj, cmask, contrast_mat[NumGroup*batchSize + tmp_xrange] = ima2(inputData[NumGroup*batchSize+tmp_xrange,:,:],cr=cr,verbose=verbose,zero_pad=zero_pad,subtract_mean=False,Sref=Sref, Sref_indx=Sref_indx,)
-                except:
+                except TypeError:
                     output[NumGroup*batchSize + tmp_xrange,:,:],_,out_int[NumGroup*batchSize + tmp_xrange], mi, mj, cmask,contrast_mat[NumGroup*batchSize + tmp_xrange] = ima2(inputData[NumGroup*batchSize+tmp_xrange,:,:],cr=cr,verbose=verbose,zero_pad=zero_pad,subtract_mean=False,Sref=Sref, Sref_indx=Sref_indx,**kwargs)
             else:
                 try:
                     output[NumGroup*batchSize + tmp_xrange,:,:],_,out_int[NumGroup*batchSize + tmp_xrange], mi, mj, cmask, contrast_mat[NumGroup*batchSize + tmp_xrange]= ima2(inputData[NumGroup*batchSize+tmp_xrange,:,:],cr=cr,ref=ref,zero_pad=zero_pad,subtract_mean=False,verbose=verbose,Sref=Sref, Sref_indx=Sref_indx,)
-                except:
+                except TypeError:
                     output[NumGroup*batchSize + tmp_xrange,:,:],_,out_int[NumGroup*batchSize + tmp_xrange], mi, mj, cmask, contrast_mat[NumGroup*batchSize + tmp_xrange] = ima2(inputData[NumGroup*batchSize+tmp_xrange,:,:],cr=cr,verbose=verbose,zero_pad=zero_pad,subtract_mean=False,Sref=Sref, Sref_indx=Sref_indx,**kwargs)
     else:
         #print("GPU mode selected!")
@@ -483,12 +491,12 @@ def PhaseReconstruction_Batch(inputData,batchSize=50,cr=0.5,trans=False,ref=np.e
             if np.size(ref) == 0:
                 try:   
                     output[NumGroup*batchSize + tmp_xrange,:,:],_,out_int[NumGroup*batchSize + tmp_xrange], mi, mj, cmask, contrast_mat[NumGroup*batchSize + tmp_xrange] = pTH.ima2(inputData[NumGroup*batchSize+tmp_xrange,:,:],cr=cr,verbose=verbose,subtract_mean=False,zero_pad=zero_pad,Sref=Sref, Sref_indx=Sref_indx,)
-                except:
+                except TypeError:
                     output[NumGroup*batchSize + tmp_xrange,:,:],_,out_int[NumGroup*batchSize + tmp_xrange], mi, mj, cmask, contrast_mat[NumGroup*batchSize + tmp_xrange] = pTH.ima2(inputData[NumGroup*batchSize+tmp_xrange,:,:],cr=cr,verbose=verbose,zero_pad=zero_pad,subtract_mean=False,Sref=Sref, Sref_indx=Sref_indx,**kwargs)
             else:
                 try:
                     output[NumGroup*batchSize + tmp_xrange,:,:],_,out_int[NumGroup*batchSize + tmp_xrange], mi, mj, cmask, contrast_mat[NumGroup*batchSize + tmp_xrange] = pTH.ima2(inputData[NumGroup*batchSize+tmp_xrange,:,:],cr=cr,ref=ref,zero_pad=zero_pad,subtract_mean=False,verbose=verbose,Sref=Sref, Sref_indx=Sref_indx,)
-                except:
+                except TypeError:
                     output[NumGroup*batchSize + tmp_xrange,:,:],_,out_int[NumGroup*batchSize + tmp_xrange],mi, mj, cmask, contrast_mat[NumGroup*batchSize + tmp_xrange] = pTH.ima2(inputData[NumGroup*batchSize+tmp_xrange,:,:],cr=cr,ref=ref,verbose=verbose,zero_pad=zero_pad,subtract_mean=False,Sref=Sref, Sref_indx=Sref_indx,**kwargs)
     
     if verbose:
@@ -504,6 +512,7 @@ def PhaseReconstruction_Batch(inputData,batchSize=50,cr=0.5,trans=False,ref=np.e
 
 def offset_gaussian(data):
     """Fit a gaussian model to `data` and return its center"""
+    _require_lmfit()
     nbins = 2 * int(np.ceil(np.sqrt(data.size)))
     mind, maxd = data.min(), data.max()
     drange = (mind - (maxd - mind) / 2, maxd + (maxd - mind) / 2)
@@ -532,6 +541,7 @@ def offset_mode(data):
 
 def profile_tilt(data, mask):
     """Fit a 2D tilt to `data[mask]`"""
+    _require_lmfit()
     params = lmfit.Parameters()
     params.add(name="mx", value=0)
     params.add(name="my", value=0)
@@ -543,6 +553,7 @@ def profile_tilt(data, mask):
 
 def profile_poly2o(data, mask):
     """Fit a 2D 2nd order polynomial to `data[mask]`"""
+    _require_lmfit()
     # lmfit
     params = lmfit.Parameters()
     params.add(name="mx", value=0)
@@ -924,7 +935,7 @@ class QPImage(object):
                     data = inData[()] #in case some times it will give the inData as a type of hdf5 dataset 
                     self.meta["label"] = "img_"
                     inData = [] 
-                except:
+                except (TypeError, ValueError):
                     raise ValueError(f"input type {type(inData)} should be either NDarray, .h5py, .h5 or .mat file!")
         else:
             self.meta["label"] = "img_"
@@ -991,7 +1002,7 @@ class QPImage(object):
         try:
             dFile = hp.File(inData,"r")
             fileType = 0 
-        except:
+        except OSError:
             dFile = loadmat(inData) 
             fileType = 1 
         
@@ -1005,12 +1016,10 @@ class QPImage(object):
             out = np.asarray(data0) #if so, it turn out that it is a dict containing all parameters
            # print("0 out {}".format(type(out)))
             searchMeta = 1 
-        except: 
+        except (TypeError, ValueError):
             data_key = self._get_keys(data0,data_key)
             out = np.asarray(data0[data_key])  
             searchMeta = 2 
-        else:
-            raise ValueError("No Data Keys Found!")
         
         if searchMeta == 1:
             outFile = dFile0 
@@ -1036,18 +1045,6 @@ class QPImage(object):
            # else:
            #     raise Warning("No other meta keys found in dataset!")
                  
-        try:
-            del dFile0["IMG"]
-        except:
-            pass 
-        try:
-            del dFile0["data"] 
-        except:
-            pass 
-        try:
-            del dFile0["ref"] 
-        except:
-            pass 
         return outFile, out 
     
 

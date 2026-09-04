@@ -1,21 +1,22 @@
 from cv2 import CamShift
 from matplotlib.colors import cnames
 import numpy as np
-from PyOCT import misc
+try:
+    from . import misc
+except ImportError:  # Allow running this file directly from the source directory.
+    import misc
 from numpy.testing import verbose 
 from scipy import signal
 import matplotlib.pyplot as plt 
 import h5py as hp 
 from skimage import filters 
 import torch 
-name = "Pytorch/nGPU" 
-device_type = "cuda"
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+name = "PyTorch/CPU"
+device_type = "cpu"
+device = torch.device("cpu")
 #print("GPU Available? {}".format(torch.cuda.is_available())) 
 #print("Current device {}".format(torch.cuda.current_device()))
 #print("GPU running on {}".format(torch.cuda.get_device_name(0))) 
-if torch.cuda.is_available():
-    torch.cuda.empty_cache()
 
 
 def find_sideband(ft_data, which=+1, copy=True):
@@ -133,41 +134,27 @@ def torch_iFFT2d(inputNDarray,dim = (-2,-1), shift=True,to_numpy=True,inputType=
 
 def torch_FFT3d(inputNDarray,zDim=0,shift=True,direction="f"):
     inputNDarray = np.asarray(inputNDarray,dtype=np.complex64)
-    Z = np.shape(inputNDarray)[zDim]
-    inD = torch.from_numpy(inputNDarray) 
-    outD = torch.zeros(inD.shape,dtype=torch.complex64)  
+    inD = torch.from_numpy(inputNDarray)
+    transform_dims = tuple(axis for axis in range(inD.ndim) if axis != zDim)
     if direction == "f":
-        for i in range(Z):
-            outD[i,:,:] = torch_FFT2d(inD[i,:,:],shift=shift,to_numpy=False,inputType="tensor") 
-    else:
-        for i in range(Z):
-            outD[i,:,:] = torch_iFFT2d(inD[i,:,:],shift=shift,to_numpy=False,inputType="tensor") 
-    return outD.numpy() 
+        return torch_FFT2d(inD, dim=transform_dims, shift=shift,
+                           to_numpy=True, inputType="tensor")
+    if direction == "b":
+        return torch_iFFT2d(inD, dim=transform_dims, shift=shift,
+                            to_numpy=True, inputType="tensor")
+    raise ValueError("direction must be 'f' or 'b'")
 
 
 def torch_FFT3d_batch(inputNDarray,batchSize=50,zDim=0,shift=True,direction="f"):
     inputNDarray = np.asarray(inputNDarray,dtype=np.complex64)
-    Z = np.shape(inputNDarray)[zDim]
-    inD = torch.from_numpy(inputNDarray) 
-    outD = torch.zeros(inD.shape,dtype=torch.complex64)  
-
-    NumGroup = int(np.floor(Z/batchSize)) 
-    xrange = np.arange(0,batchSize,step=1,dtype=int) 
-    if direction == "f":
-        for i in range(NumGroup):
-            outD[i*batchSize+xrange,:,:] = torch_FFT2d(inD[i*batchSize+xrange,:,:],dim=(1,2),shift=shift,to_numpy=False,inputType="tensor") 
-    else:
-        for i in range(NumGroup):
-            outD[i*batchSize+xrange,:,:] = torch_iFFT2d(inD[i*batchSize+xrange,:,:],dim=(1,2),shift=shift,to_numpy=False,inputType="tensor") 
-
-    if (Z % batchSize):
-        tmp_xrange = np.arange(0,Z % batchSize, step=1, dtype=int) 
-        if direction == "f":
-            outD[NumGroup*batchSize+tmp_xrange,:,:] = torch_FFT2d(inD[NumGroup*batchSize+tmp_xrange,:,:],dim=(1,2),shift=shift,to_numpy=False,inputType="tensor") 
-        else:
-            outD[NumGroup*batchSize+tmp_xrange,:,:] = torch_iFFT2d(inD[NumGroup*batchSize+tmp_xrange,:,:],dim=(1,2),shift=shift,to_numpy=False,inputType="tensor") 
-
-    return outD.numpy() 
+    if zDim != 0:
+        inputNDarray = np.moveaxis(inputNDarray, zDim, 0)
+    chunks = []
+    for start in range(0, inputNDarray.shape[0], batchSize):
+        chunks.append(torch_FFT3d(inputNDarray[start:start + batchSize],
+                                  zDim=0, shift=shift, direction=direction))
+    output = np.concatenate(chunks, axis=0)
+    return np.moveaxis(output, 0, zDim) if zDim != 0 else output
 
 
 def mk_ellipse(XR,YR,X,Y):

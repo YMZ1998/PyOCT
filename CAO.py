@@ -1,7 +1,10 @@
 # PF-OCE imaging reconstruction and processing 
 import os 
 import numpy as np 
-import PyOCTRecon
+try:
+        from . import PyOCTRecon
+except ImportError:  # Allow running this file directly from the source directory.
+        import PyOCTRecon
 import matplotlib.pyplot as plt 
 import matplotlib 
 import re 
@@ -10,11 +13,11 @@ import h5py
 from scipy import ndimage
 # set font of plot 
 matplotlib.rcParams['font.family'] = 'sans-serif'
-matplotlib.rcParams['font.sans-serif'] = ['Helvetica']
+matplotlib.rcParams['font.sans-serif'] = ['DejaVu Sans']
 font = {'weight': 'normal',
         'size'   : 14}
 matplotlib.rc('font', **font)
-matplotlib.rc('text', usetex=True)
+matplotlib.rc('text', usetex=False)
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 
@@ -75,7 +78,7 @@ def SearchingCoverGlass(inData,Settings,start_index = 5, end_index = 150, verbos
         # Method I: based on local maximum 
         tempData = ndimage.median_filter(tempData,size=3) 
         mid_index = int((start_index+end_index)/2)
-        peaks = np.zeros((2,),dtype=np.int)
+        peaks = np.zeros((2,),dtype=int)
         peaks[0] = int(np.argmax(tempData[start_index:mid_index]) + start_index)
         peaks[1] = int(np.argmax(tempData[mid_index:end_index])+mid_index) 
         if verbose:
